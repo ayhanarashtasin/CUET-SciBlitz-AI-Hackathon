@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   LuLayoutDashboard,
   LuMessageSquare,
@@ -78,23 +77,70 @@ export default function Sidebar({ activeTab, user }) {
       : 'S';
   }, [safeUser.name]);
 
-  // Sidebar collapse state (desktop)
+  // Sidebar collapse state (desktop only)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('topkorbo_sidebar_collapsed') === 'true';
+    try {
+      return localStorage.getItem('topkorbo_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Mobile viewport tracking (<= 768px)
+  const [isMobile, setIsMobile] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
   });
 
   // Mobile menu open state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Lock body scroll and handle Escape key when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') {
+          setIsMobileMenuOpen(false);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isMobileMenuOpen]);
+
   // Unread class badge
   const [hasUnreadClass, setHasUnreadClass] = useState(() => {
-    return localStorage.getItem('topkorbo_class_unread') === 'true';
+    try {
+      return localStorage.getItem('topkorbo_class_unread') === 'true';
+    } catch {
+      return false;
+    }
   });
 
   useEffect(() => {
     if (activeTab === 'my-class') {
       setHasUnreadClass(false);
-      localStorage.removeItem('topkorbo_class_unread');
+      try {
+        localStorage.removeItem('topkorbo_class_unread');
+      } catch {}
     }
   }, [activeTab]);
 
@@ -111,10 +157,15 @@ export default function Sidebar({ activeTab, user }) {
   const toggleSidebar = useCallback(() => {
     setIsSidebarCollapsed(prev => {
       const nextVal = !prev;
-      localStorage.setItem('topkorbo_sidebar_collapsed', String(nextVal));
+      try {
+        localStorage.setItem('topkorbo_sidebar_collapsed', String(nextVal));
+      } catch {}
       return nextVal;
     });
   }, []);
+
+  // Collapsed icon mode ONLY takes effect on desktop viewports
+  const isCollapsedMode = isSidebarCollapsed && !isMobile;
 
   // ── Helper to check if item is currently active ──
   const isItemActive = useCallback((itemId) => {
@@ -356,7 +407,7 @@ export default function Sidebar({ activeTab, user }) {
     }
   }, [activeTab, sections, isItemActive]);
 
-  // Toggle individual section accordion
+  // Toggle individual section accordion with non-blocking instant state update
   const handleSectionToggle = useCallback((sectionKey) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -375,9 +426,11 @@ export default function Sidebar({ activeTab, user }) {
     }
 
     if (item.id === 'qbank') {
-      sessionStorage.removeItem('qbank_selected_subject_id');
-      sessionStorage.removeItem('qbank_selected_prep_stream');
-      sessionStorage.removeItem('qbank_selected_source_context');
+      try {
+        sessionStorage.removeItem('qbank_selected_subject_id');
+        sessionStorage.removeItem('qbank_selected_prep_stream');
+        sessionStorage.removeItem('qbank_selected_source_context');
+      } catch {}
       window.dispatchEvent(new Event('reset-qbank'));
     }
 
@@ -404,11 +457,7 @@ export default function Sidebar({ activeTab, user }) {
           aria-current={active ? 'page' : undefined}
         >
           {active && (
-            <motion.span
-              layoutId="sidebarActivePill"
-              className="dashboard-sidebar__active-indicator"
-              transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-            />
+            <span className="dashboard-sidebar__active-indicator" aria-hidden="true" />
           )}
 
           <span className="dashboard-sidebar__menu-icon">
@@ -452,7 +501,7 @@ export default function Sidebar({ activeTab, user }) {
       {/* Mobile Top Bar */}
       <header className="dashboard-mobile-topbar">
         <div className="dashboard-sidebar__logo-container">
-          <a href="/" className="dashboard-sidebar__logo">
+          <a href="/" className="dashboard-sidebar__logo" title="TopKorbo Home">
             <svg viewBox="0 0 100 100" fill="none" className="dashboard-sidebar__logo-svg" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <linearGradient id="dbLogoGradMobile" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -473,7 +522,10 @@ export default function Sidebar({ activeTab, user }) {
               <circle cx="18" cy="52" r="3.5" fill="url(#dbLogoGradMobile)" />
               <path d="M 14,55 H 22 L 24,78 H 12 Z" fill="url(#dbLogoGradMobile)" />
             </svg>
-            <span className="dashboard-sidebar__logo-text">TopKorbo</span>
+            <div className="dashboard-sidebar__logo-brand">
+              <span className="dashboard-sidebar__logo-text">TopKorbo</span>
+              <span className="dashboard-sidebar__logo-badge">EDTECH</span>
+            </div>
           </a>
         </div>
 
@@ -499,10 +551,49 @@ export default function Sidebar({ activeTab, user }) {
       {/* Main Sidebar Aside */}
       <aside
         className={`dashboard-sidebar ${
-          isSidebarCollapsed ? 'dashboard-sidebar--collapsed' : ''
+          isCollapsedMode ? 'dashboard-sidebar--collapsed' : ''
         } ${isMobileMenuOpen ? 'dashboard-sidebar--mobile-open' : ''}`}
         aria-label="Main Navigation"
       >
+        {/* Mobile-Only Drawer Header with Brand Logo & Close (X) Button */}
+        <div className="dashboard-sidebar__mobile-header">
+          <a href="/" className="dashboard-sidebar__logo" title="TopKorbo Home" onClick={() => setIsMobileMenuOpen(false)}>
+            <svg viewBox="0 0 100 100" fill="none" className="dashboard-sidebar__logo-svg" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="dbLogoGradMobileDrawer" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#C08552" />
+                  <stop offset="35%" stopColor="#D4A373" />
+                  <stop offset="70%" stopColor="#8C5A3C" />
+                  <stop offset="100%" stopColor="#4B2E2B" />
+                </linearGradient>
+              </defs>
+              <path d="M 28,45 C 28,45 28,58 50,68 C 72,58 72,45 72,45" stroke="url(#dbLogoGradMobileDrawer)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" fill="rgba(37, 24, 23, 0.2)" />
+              <path d="M 50,15 L 90,36 L 50,57 L 10,36 Z" stroke="url(#dbLogoGradMobileDrawer)" strokeWidth="4.5" strokeLinejoin="round" fill="rgba(37, 24, 23, 0.55)" />
+              <path d="M 50,19 L 82,36 L 50,53 L 18,36 Z" stroke="url(#dbLogoGradMobileDrawer)" strokeWidth="1" strokeLinejoin="round" fill="url(#dbLogoGradMobileDrawer)" fillOpacity="0.08" />
+              <path d="M 37,25 H 63 M 50,25 V 45" stroke="url(#dbLogoGradMobileDrawer)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M 37,25 V 29 M 63,25 V 29" stroke="url(#dbLogoGradMobileDrawer)" strokeWidth="3" strokeLinecap="round" />
+              <path d="M 44,28 V 44" stroke="url(#dbLogoGradMobileDrawer)" strokeWidth="3.5" strokeLinecap="round" />
+              <path d="M 44,36 L 55,28 M 44,36 L 55,44" stroke="url(#dbLogoGradMobileDrawer)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M 50,36 C 40,30 20,25 18,32 L 18,50" stroke="url(#dbLogoGradMobileDrawer)" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+              <circle cx="18" cy="52" r="3.5" fill="url(#dbLogoGradMobileDrawer)" />
+              <path d="M 14,55 H 22 L 24,78 H 12 Z" fill="url(#dbLogoGradMobileDrawer)" />
+            </svg>
+            <div className="dashboard-sidebar__logo-brand">
+              <span className="dashboard-sidebar__logo-text">TopKorbo</span>
+              <span className="dashboard-sidebar__logo-badge">EDTECH</span>
+            </div>
+          </a>
+
+          <button
+            type="button"
+            className="dashboard-sidebar__close-btn"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label={language === 'en' ? 'Close sidebar menu' : 'সাইডবার মেনু বন্ধ করুন'}
+          >
+            <LuX size={19} />
+          </button>
+        </div>
+
         {/* Desktop Brand Header */}
         <div className="dashboard-sidebar__logo-container desktop-only-logo">
           <a href="/" className="dashboard-sidebar__logo" title="TopKorbo Home">
@@ -558,7 +649,7 @@ export default function Sidebar({ activeTab, user }) {
               const isExpanded = !!expandedSections[section.key];
               const hasActiveChild = section.items.some(item => isItemActive(item.id));
 
-              if (isSidebarCollapsed) {
+              if (isCollapsedMode) {
                 return (
                   <div key={section.key} className="dashboard-sidebar__section dashboard-sidebar__section--collapsed-mode">
                     <div className="dashboard-sidebar__collapsed-items">
@@ -585,6 +676,7 @@ export default function Sidebar({ activeTab, user }) {
                       hasActiveChild ? 'dashboard-sidebar__section-header--active' : ''
                     }`}
                     aria-expanded={isExpanded}
+                    aria-controls={`sidebar-section-${section.key}`}
                   >
                     <div className="dashboard-sidebar__section-header-left">
                       <span className="dashboard-sidebar__section-title">
@@ -605,36 +697,19 @@ export default function Sidebar({ activeTab, user }) {
                     </div>
                   </button>
 
-                  {/* Accordion Expand/Collapse Content with Framer Motion */}
-                  <AnimatePresence initial={false}>
-                    {isExpanded && (
-                      <motion.div
-                        key={`content-${section.key}`}
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{
-                          height: 'auto',
-                          opacity: 1,
-                          transition: {
-                            height: { duration: 0.18, ease: [0.4, 0, 0.2, 1] },
-                            opacity: { duration: 0.14, delay: 0.03 }
-                          }
-                        }}
-                        exit={{
-                          height: 0,
-                          opacity: 0,
-                          transition: {
-                            height: { duration: 0.15, ease: [0.4, 0, 0.2, 1] },
-                            opacity: { duration: 0.1 }
-                          }
-                        }}
-                        className="dashboard-sidebar__section-body"
-                      >
-                        <ul className="dashboard-sidebar__menu dashboard-sidebar__menu--tree">
-                          {section.items.map(item => renderMenuItem(item, true))}
-                        </ul>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {/* Accordion Content with Ultra-Smooth Hardware-Accelerated CSS Grid Transition */}
+                  <div
+                    id={`sidebar-section-${section.key}`}
+                    className={`dashboard-sidebar__section-body ${
+                      isExpanded ? 'dashboard-sidebar__section-body--expanded' : ''
+                    }`}
+                  >
+                    <div className="dashboard-sidebar__section-inner">
+                      <ul className="dashboard-sidebar__menu dashboard-sidebar__menu--tree">
+                        {section.items.map(item => renderMenuItem(item, true))}
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -703,3 +778,4 @@ export default function Sidebar({ activeTab, user }) {
     </>
   );
 }
+
