@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
-import { HiArrowRight, HiCheck, HiClock, HiOutlineUserGroup, HiSparkles, HiX } from 'react-icons/hi';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from '../hooks/usePlan';
+import useSocket from '../hooks/useSocket';
+import { HiCalendar, HiAcademicCap, HiTrash, HiOutlineClock } from 'react-icons/hi';
 import Sidebar from '../components/layout/Sidebar';
 import {
   fetchMentorDashboard,
-  respondToMentorRequest
+  respondToMentorRequest,
+  postMentorAnnouncement
 } from '../services/mentorApi';
 import { getDashboardActivity, getStats } from '../services/practiceApi';
 import { getMyRating } from '../services/contestApi';
@@ -16,17 +20,15 @@ import {
   DailyProgressSection,
   StudentProfileSection
 } from '../components/dashboard/StudentDashboardSections';
+import MentorCommandBar from '../components/mentor/dashboard/MentorCommandBar';
+import MentorPendingQueue from '../components/mentor/dashboard/MentorPendingQueue';
+import MentorStudentRoster from '../components/mentor/dashboard/MentorStudentRoster';
+import CohortInsightsRadar from '../components/mentor/dashboard/CohortInsightsRadar';
+import StudentDossierDrawer from '../components/mentor/dashboard/StudentDossierDrawer';
+import MentorDashboardSkeleton from '../components/mentor/dashboard/MentorDashboardSkeleton';
 import { buildStudentAnalytics } from '../utils/dashboardAnalytics';
 import './Dashboard.css';
-
-function formatDate(value, language) {
-  if (!value) return 'N/A';
-  return new Date(value).toLocaleDateString(language === 'en' ? 'en-US' : 'bn-BD', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
-}
+import '../components/mentor/dashboard/MentorDashboard.css';
 
 const EMPTY_RATING_DATA = {
   current: 0,
@@ -39,17 +41,36 @@ const EMPTY_RATING_DATA = {
 
 const EMPTY_MENTOR_DASHBOARD = {
   capacity: 30,
+  cohortWeakSpots: [],
   pendingRequests: [],
   students: [],
   overview: {
     totalStudents: 0,
     activeStudents: 0,
+    activeStudents48h: 0,
+    activeRate: 0,
     totalAttempts: 0,
     averageStudentScore: 0,
     averageRanking: null,
     subjectInsights: []
   }
 };
+
+/**
+ * studentId -> Set(noteId) of assignments waiting on this mentor.
+ *
+ * Keyed by note id rather than held as a plain counter so that every socket
+ * event is idempotent: a duplicated "submitted" cannot double-count, and an
+ * unsubmit, a review or a status toggle always removes exactly the right entry
+ * instead of blindly decrementing a number that has drifted.
+ */
+function seedPendingSubmissions(students = []) {
+  return students.reduce((acc, entry) => {
+    const id = String(entry.student?._id || '');
+    if (id) acc[id] = new Set(entry.pendingSubmissions || []);
+    return acc;
+  }, {});
+}
 
 let dashboardUserRequest = null;
 
@@ -146,7 +167,10 @@ export default function Dashboard() {
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState('');
   const [respondingRequestId, setRespondingRequestId] = useState('');
+  const [dossierStudentId, setDossierStudentId] = useState(null);
+  const [pendingByStudent, setPendingByStudent] = useState({});
 
+  const navigate = useNavigate();
   const { refresh: refreshPlan } = usePlan();
 
   const activeTab = 'dashboard';
@@ -189,12 +213,12 @@ export default function Dashboard() {
       const resData = await response.json();
       if (!resData.success) {
         setUpcomingContests(previous);
-        window.alert(resData.message || 'Failed to delete contest');
+        toast.error(resData.message || 'Failed to delete contest');
       }
     } catch (err) {
       console.error('Error deleting contest:', err);
       setUpcomingContests(previous);
-      window.alert('Network error while deleting contest');
+      toast.error('Network error while deleting contest');
     }
   };
 
@@ -260,6 +284,7 @@ export default function Dashboard() {
 
           if (mentorResult.status === 'rejected') throw mentorResult.reason;
           setMentorDashboard(mentorResult.value || EMPTY_MENTOR_DASHBOARD);
+          setPendingByStudent(seedPendingSubmissions(mentorResult.value?.students));
           if (contestsResult.status === 'fulfilled') {
             setUpcomingContests(contestsResult.value);
           } else {
@@ -337,16 +362,55 @@ export default function Dashboard() {
     return language === 'en' ? `${diffMinutes} min${diffMinutes > 1 ? 's' : ''} left` : `${diffMinutes} মিনিট বাকি`;
   };
 
-  const handleRequestResponse = async (connectionId, action) => {
+  const handleRequestResponse = useCallback(async (connectionId, action) => {
+    setRespondingRequestId(connectionId);
+
+    // Drop the card immediately. Waiting on a full dashboard refetch before
+    // acknowledging the tap reads as a broken button on a phone connection.
+    setMentorDashboard((prev) => ({
+      ...prev,
+      pendingRequests: (prev.pendingRequests || [])
+        .filter((request) => String(request._id) !== String(connectionId))
+    }));
+
     try {
-      setRespondingRequestId(connectionId);
       await respondToMentorRequest(connectionId, action);
-      const mentorData = await fetchMentorDashboard();
-      setMentorDashboard(mentorData || EMPTY_MENTOR_DASHBOARD);
+      toast.success(action === 'accepted' ? 'Student added to your roster.' : 'Request declined.');
+
+      // Accepting produces a roster card with analytics we do not hold locally.
+      if (action === 'accepted') {
+        const mentorData = await fetchMentorDashboard();
+        setMentorDashboard(mentorData || EMPTY_MENTOR_DASHBOARD);
+        setPendingByStudent(seedPendingSubmissions(mentorData?.students));
+      }
     } catch (err) {
-      window.alert(err.message || 'Failed to update request.');
+      toast.error(err.message || 'Failed to update request.');
+      // The card we optimistically removed may still be pending — re-sync.
+      try {
+        const mentorData = await fetchMentorDashboard();
+        setMentorDashboard(mentorData || EMPTY_MENTOR_DASHBOARD);
+        setPendingByStudent(seedPendingSubmissions(mentorData?.students));
+      } catch {
+        // Leave the optimistic view; the toast already explained the failure.
+      }
     } finally {
       setRespondingRequestId('');
+    }
+  }, []);
+
+  const handleLaunchLiveClass = () => navigate('/mentor/live-class');
+
+  const handlePostAnnouncement = async (message, attachments = []) => {
+    try {
+      const result = await postMentorAnnouncement(message, attachments);
+      const count = result?.data?.recipients || result?.recipients;
+      toast.success(count
+        ? `Announcement sent to ${count} student${count === 1 ? '' : 's'}.`
+        : 'Announcement sent.');
+      return true;
+    } catch (err) {
+      toast.error(err.message || 'Failed to send announcement.');
+      return false;
     }
   };
 
@@ -362,170 +426,90 @@ export default function Dashboard() {
       <DailyProgressSection analytics={studentAnalytics} />
     </div>
   );
+  const { on } = useSocket();
+
+  /** Adds or removes one assignment from a student's waiting-for-review set. */
+  const markPending = useCallback((studentId, noteId, isPending) => {
+    if (!studentId || !noteId) return;
+    setPendingByStudent((prev) => {
+      const key = String(studentId);
+      const id = String(noteId);
+      const current = prev[key] || new Set();
+      if (current.has(id) === isPending) return prev; // already correct — no re-render
+      const next = new Set(current);
+      if (isPending) next.add(id);
+      else next.delete(id);
+      return { ...prev, [key]: next };
+    });
+  }, []);
+
+  const handleAssignmentReviewed = useCallback((studentId, noteId) => {
+    markPending(studentId, noteId, false);
+  }, [markPending]);
+
+  // Closing the dossier must be referentially stable: the drawer's focus-trap
+  // effect depends on it, and an inline arrow made that effect tear down on
+  // every dashboard re-render, yanking focus out of the feedback box mid-typing.
+  const handleCloseDossier = useCallback(() => setDossierStudentId(null), []);
+
+  useEffect(() => {
+    if (!isMentor) return undefined;
+
+    const offSubmitted = on('class:assignment:submitted', (note) => {
+      markPending(note.studentId || note.student?._id, note._id, true);
+    });
+
+    // Covers unsubmit, review and the plain status toggle in one place, because
+    // the set is rebuilt from the note's own status rather than nudged by ±1.
+    const offUpdate = on('class:assignment:update', (note) => {
+      markPending(note.studentId || note.student?._id, note._id, note.status === 'submitted');
+    });
+
+    const offRequest = on('mentor:request:new', (request) => {
+      setMentorDashboard((prev) => {
+        const already = (prev.pendingRequests || [])
+          .some((item) => String(item._id) === String(request._id));
+        if (already) return prev;
+        return { ...prev, pendingRequests: [request, ...(prev.pendingRequests || [])] };
+      });
+    });
+
+    return () => {
+      offSubmitted && offSubmitted();
+      offUpdate && offUpdate();
+      offRequest && offRequest();
+    };
+  }, [isMentor, on, markPending]);
+
+  // The roster reads its badge counts from the live set, not the seeded number.
+  const rosterStudents = useMemo(
+    () => (mentorDashboard.students || []).map((entry) => {
+      const pending = pendingByStudent[String(entry.student?._id || '')];
+      return pending ? { ...entry, pendingSubmissionsCount: pending.size } : entry;
+    }),
+    [mentorDashboard.students, pendingByStudent]
+  );
+
   const renderMentorWorkspace = () => (
-    <div className="dashboard-panels">
-      <section className="dashboard-panel">
-        <div className="dashboard-panel__header">
-          <div>
-            <h3>Mentor overview</h3>
-            <p>Monitor requests, connected students, rankings, and subject trends from one place.</p>
-          </div>
-          <span className="dashboard-stat-pill">{mentorDashboard.overview.totalStudents}/{mentorDashboard.capacity} students</span>
-        </div>
-
-        <div className="overview-grid">
-          <div className="overview-card">
-            <HiOutlineUserGroup size={20} />
-            <strong>{mentorDashboard.overview.totalStudents}</strong>
-            <span>Connected students</span>
-          </div>
-          <div className="overview-card">
-            <HiClock size={20} />
-            <strong>{mentorDashboard.pendingRequests.length}</strong>
-            <span>Pending requests</span>
-          </div>
-          <div className="overview-card">
-            <HiSparkles size={20} />
-            <strong>{mentorDashboard.overview.averageStudentScore}</strong>
-            <span>Average score</span>
-          </div>
-          <div className="overview-card">
-            <HiArrowRight size={20} />
-            <strong>{mentorDashboard.overview.averageRanking || '-'}</strong>
-            <span>Average rank</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="dashboard-panel">
-        <div className="dashboard-panel__header">
-          <div>
-            <h3>Pending student requests</h3>
-            <p>Accept or decline incoming requests directly from the mentor panel.</p>
-          </div>
-        </div>
-
-        <div className="dashboard-list">
-          {mentorDashboard.pendingRequests.length === 0 ? (
-            <div className="dashboard-empty">No pending requests right now.</div>
-          ) : (
-            mentorDashboard.pendingRequests.map((request) => (
-              <div key={request._id} className="dashboard-list__item dashboard-list__item--stacked">
-                <div>
-                  <strong>{request.student.name}</strong>
-                  <p>{request.student.collegeName || request.student.stream || 'Student profile'}</p>
-                  <small>Requested on {formatDate(request.requestedAt, language)}</small>
-                </div>
-                <div className="request-actions">
-                  <button
-                    type="button"
-                    className="request-action request-action--accept"
-                    disabled={respondingRequestId === request._id}
-                    onClick={() => handleRequestResponse(request._id, 'accepted')}
-                  >
-                    <HiCheck size={16} />
-                    Accept
-                  </button>
-                  <button
-                    type="button"
-                    className="request-action request-action--decline"
-                    disabled={respondingRequestId === request._id}
-                    onClick={() => handleRequestResponse(request._id, 'declined')}
-                  >
-                    <HiX size={16} />
-                    Decline
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="dashboard-panel">
-        <div className="dashboard-panel__header">
-          <div>
-            <h3>Subject analytics</h3>
-            <p>Quick visualization of the best-performing subjects across your connected students.</p>
-          </div>
-        </div>
-
-        <div className="subject-insights">
-          {(mentorDashboard.overview.subjectInsights || []).length === 0 ? (
-            <div className="dashboard-empty">Subject analytics will appear after students finish mock tests.</div>
-          ) : (
-            mentorDashboard.overview.subjectInsights.map((item) => (
-              <div key={item.subject} className="subject-insights__item">
-                <div className="subject-insights__head">
-                  <strong>{item.subject}</strong>
-                  <span>{item.accuracy}% accuracy</span>
-                </div>
-                <div className="subject-bars__track">
-                  <div className="subject-bars__fill" style={{ width: `${Math.max(8, item.accuracy)}%` }} />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="dashboard-panel">
-        <div className="dashboard-panel__header">
-          <div>
-            <h3>Student analytics</h3>
-            <p>Every accepted student gets a compact card with attempts, rankings, and subject-wise performance.</p>
-          </div>
-        </div>
-
-        <div className="student-grid">
-          {mentorDashboard.students.length === 0 ? (
-            <div className="dashboard-empty">Accepted students will show up here with their reports.</div>
-          ) : (
-            mentorDashboard.students.map((entry) => (
-              <article key={entry.connectionId} className="student-card">
-                <div className="student-card__header">
-                  <div>
-                    <h4>{entry.student.name}</h4>
-                    <p>{entry.student.collegeName || entry.student.stream || 'Student profile'}</p>
-                  </div>
-                  <span className="dashboard-tag">Joined {formatDate(entry.connectedAt, language)}</span>
-                </div>
-                <div className="student-card__stats">
-                  <div>
-                    <span>Attempts</span>
-                    <strong>{entry.analytics.totalAttempts}</strong>
-                  </div>
-                  <div>
-                    <span>Avg score</span>
-                    <strong>{entry.analytics.averageScore}</strong>
-                  </div>
-                  <div>
-                    <span>Best score</span>
-                    <strong>{entry.analytics.bestScore}</strong>
-                  </div>
-                  <div>
-                    <span>Latest rank</span>
-                    <strong>{entry.analytics.ranking?.overallPosition ? `#${entry.analytics.ranking.overallPosition}` : '-'}</strong>
-                  </div>
-                </div>
-                <div className="subject-insights">
-                  {(entry.analytics.subjectPerformance || []).slice(0, 4).map((subject) => (
-                    <div key={`${entry.student._id}-${subject.subject}`} className="subject-insights__item">
-                      <div className="subject-insights__head">
-                        <strong>{subject.subject}</strong>
-                        <span>{subject.correct}/{subject.total}</span>
-                      </div>
-                      <div className="subject-bars__track">
-                        <div className="subject-bars__fill" style={{ width: `${Math.max(8, subject.accuracy)}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
+    <div className="mc-workspace">
+      <MentorCommandBar
+        mentorName={user.name}
+        overview={mentorDashboard.overview}
+        capacity={mentorDashboard.capacity}
+        pendingCount={mentorDashboard.pendingRequests.length}
+        onLaunchLiveClass={handleLaunchLiveClass}
+        onPostAnnouncement={handlePostAnnouncement}
+      />
+      <MentorPendingQueue
+        requests={mentorDashboard.pendingRequests}
+        respondingRequestId={respondingRequestId}
+        onRespond={handleRequestResponse}
+      />
+      <CohortInsightsRadar weakSpots={mentorDashboard.cohortWeakSpots} />
+      <MentorStudentRoster
+        students={rosterStudents}
+        onOpenDossier={setDossierStudentId}
+      />
     </div>
   );
 
@@ -533,11 +517,13 @@ export default function Dashboard() {
     <div className="dashboard-container">
       <Sidebar activeTab={activeTab} user={user} />
 
-      <main className="dashboard-main">
+      <main className={`dashboard-main${isMentor ? ' dashboard-main--mentor' : ''}`}>
         <div className={`dashboard-workspace ${isTeacher ? 'dashboard-workspace--teacher' : ''}`}>
           <div className="dashboard-workspace__body">
             {dashboardError ? <div className="dashboard-empty dashboard-empty--error">{dashboardError}</div> : null}
-            {dashboardLoading ? <div className="dashboard-empty">Loading dashboard...</div> : null}
+            {dashboardLoading
+              ? (isMentor ? <MentorDashboardSkeleton /> : <div className="dashboard-empty">Loading dashboard...</div>)
+              : null}
             {!dashboardLoading && !dashboardError && (isMentor ? renderMentorWorkspace() : renderStudentWorkspace())}
           </div>
 
@@ -549,14 +535,14 @@ export default function Dashboard() {
               <div className="upcoming-contests-list">
                 {upcomingContests.length === 0 ? (
                   <div className="upcoming-contests-empty">
-                    <span className="empty-icon">🗓</span>
+                    <span className="empty-icon"><HiCalendar size={24} /></span>
                     <p>{language === 'en' ? 'No upcoming contests' : 'কোনো আসন্ন কনটেস্ট নেই'}</p>
                   </div>
                 ) : (
                   upcomingContests.map((contest) => (
                     <div key={contest._id} className="contest-card-upcoming">
                       <div className="contest-card-upcoming__header">
-                        <span className="contest-badge-icon">🏆</span>
+                        <span className="contest-badge-icon"><HiAcademicCap size={16} /></span>
                         <h4 className="contest-title" title={contest.name}>{contest.name}</h4>
                         <button
                           type="button"
@@ -565,16 +551,16 @@ export default function Dashboard() {
                           aria-label="Delete contest"
                           onClick={() => handleDeleteContest(contest._id, contest.name)}
                         >
-                          🗑️
+                          <HiTrash size={16} />
                         </button>
                       </div>
                       <div className="contest-card-upcoming__details">
                         <div className="contest-detail-item">
-                          <span className="detail-icon">⏳</span>
+                          <span className="detail-icon"><HiOutlineClock size={15} /></span>
                           <span className="detail-value">{getRemainingTime(contest)}</span>
                         </div>
                         <div className="contest-detail-item">
-                          <span className="detail-icon">🕒</span>
+                          <span className="detail-icon"><HiOutlineClock size={15} /></span>
                           <span className="detail-value">
                             {contest.startTime?.hour}:{String(contest.startTime?.minute).padStart(2, '0')} {contest.startTime?.period} ({contest.startTime?.timezone})
                           </span>
@@ -588,6 +574,17 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+
+      <AnimatePresence>
+        {dossierStudentId && (
+          <StudentDossierDrawer
+            key={dossierStudentId}
+            studentId={dossierStudentId}
+            onClose={handleCloseDossier}
+            onAssignmentReviewed={handleAssignmentReviewed}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

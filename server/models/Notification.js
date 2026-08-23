@@ -26,7 +26,11 @@ const notificationSchema = new mongoose.Schema(
     // Interaction category — drives the notification UI text and icon.
     type: {
       type: String,
-      enum: ['like', 'love', 'comment', 'reply', 'mention', 'follow', 'warning', 'admin_update', 'live_class'],
+      enum: [
+        'like', 'love', 'comment', 'reply', 'mention', 'follow', 'warning', 'admin_update', 'live_class',
+        'mentor_announcement', 'mentor_task', 'mentor_feedback', 'mentor_submission',
+        'mentor_request'
+      ],
       required: true
     },
     // Optional linked entities for contextual deep-links.

@@ -25,7 +25,10 @@ const notificationController = {
   async list(req, res, next) {
     try {
       const limit = clampLimit(req.query.limit, 30, 100);
-      const filter = { recipient: req.user.id };
+      const filter = {
+        recipient: req.user.id,
+        type: { $nin: ['mentor_task', 'mentor_submission', 'mentor_feedback', 'mentor_announcement'] }
+      };
       const cursorFields = ['createdAt'];
 
       // Support both cursor-based and legacy `before` timestamp pagination.
@@ -47,7 +50,8 @@ const notificationController = {
           .lean(),
         Notification.countDocuments({
           recipient: req.user.id,
-          read: false
+          read: false,
+          type: { $nin: ['mentor_task', 'mentor_submission', 'mentor_feedback', 'mentor_announcement'] }
         })
       ]);
 

@@ -1,18 +1,26 @@
 /**
- * useSocket — React hook that manages a single shared Socket.IO connection.
+ * useSocket — React hook over a single, app-wide Socket.IO connection.
  *
- * Why a hook?
- *  - Keeps one connection alive for the lifetime of the app instead of one per
- *    component, reducing overhead and avoiding duplicate event handlers.
- *  - Provides a clean subscribe/unsubscribe pattern via the returned `on`
- *    helper so components can register event listeners without worrying about
- *    cleanup or stale references.
+ * Why a module-level singleton?
+ *  - Every component that called this hook used to open its OWN WebSocket. With
+ *    the notification listener, My Class and the notification bell mounted at
+ *    once that was 3-4 sockets per tab, each authenticating and joining
+ *    `user:<id>` separately, multiplying server-side fan-out for no benefit.
+ *  - The connection is refcounted: it opens on the first subscriber and closes
+ *    when the last one unmounts, so a logged-out app holds nothing open.
+ *
+ * Mobile behaviour:
+ *  - Phone browsers freeze background tabs and silently drop the socket. On
+ *    return to the foreground we check liveness and reconnect immediately
+ *    rather than waiting out the back-off, so a student who switches apps
+ *    mid-lesson does not come back to a dead feed.
  *
  * Features:
- *  - Authenticates using the JWT stored in localStorage.
+ *  - Authenticates using the JWT stored in localStorage; re-handshakes when
+ *    that token changes (login, logout, token refresh).
  *  - Auto-reconnects with exponential back-off (1s → 8s cap).
- *  - Exposes `on(event, handler)` and `emit(event, payload)` shorthands that
- *    safely no-op when the socket is not yet available.
+ *  - `on(event, handler)` returns its own unsubscribe function, so it drops
+ *    straight into a useEffect cleanup.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -25,16 +33,54 @@ const DEFAULT_URL = import.meta.env.VITE_SOCKET_URL
     ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
     : (import.meta.env.PROD ? window.location.origin : 'http://localhost:5000'));
 
-export default function useSocket() {
-  const [connected, setConnected] = useState(false);
-  const [socket, setSocket] = useState(null);
-  // Hold the raw socket instance in a ref so event helpers can access it
-  // without being captured in stale closures.
-  const socketRef = useRef(null);
+const TOKEN_KEY = 'topkorbo_token';
 
-  useEffect(() => {
-    const token = localStorage.getItem('topkorbo_token') || '';
-    const s = io(DEFAULT_URL, {
+let sharedSocket = null;
+let sharedToken = null;
+let refCount = 0;
+let teardownTimer = null;
+// Components that want to be told when the connection state flips.
+const stateSubscribers = new Set();
+
+function broadcastState(connected) {
+  stateSubscribers.forEach((notifyOne) => {
+    try {
+      notifyOne(connected);
+    } catch {
+      // A subscriber throwing must not stop the rest from being told.
+    }
+  });
+}
+
+function readToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || '';
+  } catch {
+    // Private-mode / blocked storage: connect anonymously rather than crash.
+    return '';
+  }
+}
+
+function teardownShared() {
+  if (!sharedSocket) return;
+  sharedSocket.removeAllListeners();
+  sharedSocket.disconnect();
+  sharedSocket = null;
+  sharedToken = null;
+}
+
+function ensureSocket() {
+  const token = readToken();
+
+  // A changed token means a different identity — the old socket is in the wrong
+  // room and must be replaced rather than reused.
+  if (sharedSocket && sharedToken !== token) {
+    teardownShared();
+  }
+
+  if (!sharedSocket) {
+    sharedToken = token;
+    sharedSocket = io(DEFAULT_URL, {
       transports: ['websocket', 'polling'],
       auth: { token },
       reconnection: true,
@@ -42,22 +88,73 @@ export default function useSocket() {
       reconnectionDelayMax: 8000,
       timeout: 15000
     });
-    socketRef.current = s;
 
-    // Track connection state so consumers can react to online/offline changes.
-    s.on('connect', () => {
-      setSocket(s);
-      setConnected(true);
-    });
-    s.on('disconnect', () => setConnected(false));
-    s.on('connect_error', () => setConnected(false));
+    sharedSocket.on('connect', () => broadcastState(true));
+    sharedSocket.on('disconnect', () => broadcastState(false));
+    sharedSocket.on('connect_error', () => broadcastState(false));
+  }
 
-    // Teardown: remove all listeners and close the connection when the
-    // component using this hook unmounts.
+  return sharedSocket;
+}
+
+/**
+ * Phone browsers suspend background tabs and kill the socket without firing a
+ * clean disconnect. Nudge it the moment the tab is visible again.
+ */
+function handleVisibilityChange() {
+  if (document.visibilityState !== 'visible') return;
+  if (sharedSocket && !sharedSocket.connected) {
+    sharedSocket.connect();
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('online', handleVisibilityChange);
+}
+
+export default function useSocket() {
+  // Seeded from module state so a component mounting into an already-live
+  // connection sees it on its first render. Later transitions arrive through
+  // the subscription below rather than a setState in the effect body, which
+  // would force an extra render pass on every mount.
+  const [connected, setConnected] = useState(() => Boolean(sharedSocket?.connected));
+  const [socket, setSocket] = useState(() => (sharedSocket?.connected ? sharedSocket : null));
+  const socketRef = useRef(sharedSocket);
+
+  useEffect(() => {
+    refCount += 1;
+    if (teardownTimer) {
+      clearTimeout(teardownTimer);
+      teardownTimer = null;
+    }
+    socketRef.current = ensureSocket();
+
+    const onStateChange = (isConnected) => {
+      // The shared socket may have been swapped out (token change); re-read it.
+      socketRef.current = sharedSocket;
+      setSocket(isConnected ? sharedSocket : null);
+      setConnected(isConnected);
+    };
+    stateSubscribers.add(onStateChange);
+
     return () => {
-      s.removeAllListeners();
-      s.disconnect();
+      stateSubscribers.delete(onStateChange);
+      refCount -= 1;
       socketRef.current = null;
+
+      // Last consumer out closes the connection — but only after a beat. A route
+      // change unmounts the old page before mounting the new one, and tearing
+      // down in that gap would drop and re-handshake the socket on every
+      // navigation. StrictMode double-mounting is absorbed the same way.
+      if (refCount <= 0) {
+        refCount = 0;
+        if (teardownTimer) clearTimeout(teardownTimer);
+        teardownTimer = setTimeout(() => {
+          teardownTimer = null;
+          if (refCount <= 0) teardownShared();
+        }, 1000);
+      }
     };
   }, []);
 
@@ -65,17 +162,17 @@ export default function useSocket() {
   // This mirrors React's useEffect cleanup pattern — call it directly inside
   // a useEffect to automatically clean up on re-render or unmount.
   const on = useCallback((event, handler) => {
-    const s = socketRef.current;
-    if (!s) return () => {};
-    s.on(event, handler);
-    return () => s.off(event, handler);
+    const active = socketRef.current || sharedSocket;
+    if (!active) return () => {};
+    active.on(event, handler);
+    return () => active.off(event, handler);
   }, []);
 
   // Emit an event to the server. No-op if the socket is not connected yet.
   const emit = useCallback((event, payload) => {
-    const s = socketRef.current;
-    if (!s) return;
-    s.emit(event, payload);
+    const active = socketRef.current || sharedSocket;
+    if (!active) return;
+    active.emit(event, payload);
   }, []);
 
   return { socket, connected, on, emit };

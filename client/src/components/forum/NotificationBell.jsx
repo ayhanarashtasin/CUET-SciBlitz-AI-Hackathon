@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HiBell, HiHeart, HiChatAlt2, HiUserAdd, HiAtSymbol, HiExclamationCircle, HiVideoCamera } from 'react-icons/hi';
+import {
+  HiBell,
+  HiHeart,
+  HiChatAlt2,
+  HiUserAdd,
+  HiAtSymbol,
+  HiExclamationCircle,
+  HiVideoCamera,
+  HiSpeakerphone,
+  HiClipboardList,
+  HiClipboardCheck
+} from 'react-icons/hi';
 import { useForum } from '../../context/ForumContext';
 
 const ICONS = {
@@ -12,7 +23,11 @@ const ICONS = {
   follow: HiUserAdd,
   warning: HiExclamationCircle,
   admin_update: HiBell,
-  live_class: HiVideoCamera
+  live_class: HiVideoCamera,
+  mentor_announcement: HiSpeakerphone,
+  mentor_task: HiClipboardList,
+  mentor_feedback: HiClipboardCheck,
+  mentor_submission: HiClipboardList
 };
 
 function timeAgo(date) {
@@ -61,6 +76,10 @@ export default function NotificationBell() {
     setOpen(false);
     if (n.type === 'live_class') {
       navigate('/student/live-class');
+    } else if (n.type === 'mentor_announcement' || n.type === 'mentor_task' || n.type === 'mentor_feedback') {
+      navigate('/my-class');
+    } else if (n.type === 'mentor_submission') {
+      navigate('/dashboard');
     } else if (n.post) {
       navigate(`/forum/post/${n.post._id || n.post}`);
     } else if (n.actor) {

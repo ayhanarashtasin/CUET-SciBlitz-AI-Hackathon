@@ -10,7 +10,7 @@ const CHAT_MESSAGES = [
   { role: 'user', key: 'আমাকে SN1 vs SN2 reaction এর পার্থক্য বুঝিয়ে দাও' },
   { role: 'ai', key: 'চলো ভাবি! প্রথমে বলো — একটি nucleophile যখন carbon কে attack করে, তখন কি leaving group আগে চলে যায়, নাকি একই সাথে?' },
   { role: 'user', key: 'আমার মনে হয় দুইভাবেই হতে পারে...' },
-  { role: 'ai', key: 'একদম ঠিক! 🎯 যখন leaving group আগে চলে যায় → carbocation তৈরি হয় → তখন SN1। আর যখন একই ধাপে nucleophile attack + leaving → SN2। এখন বলো, কোন ক্ষেত্রে tertiary carbon ভালো কাজ করবে?' },
+  { role: 'ai', key: 'একদম ঠিক! যখন leaving group আগে চলে যায় → carbocation তৈরি হয় → তখন SN1। আর যখন একই ধাপে nucleophile attack + leaving → SN2। এখন বলো, কোন ক্ষেত্রে tertiary carbon ভালো কাজ করবে?' },
 ];
 
 export default function AISection() {

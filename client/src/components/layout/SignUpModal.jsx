@@ -640,7 +640,6 @@ export default function SignUpModal({ isOpen, onClose, initialMode = 'signup' })
                   <p className="signup-modal__subtitle">{t('signup.subtitle')}</p>
                   {errorMsg && (
                     <div className="signup-modal__warning-banner" style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(192, 133, 82, 0.1)', border: '1px solid rgba(192, 133, 82, 0.3)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.88rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left', lineHeight: '1.4' }}>
-                      <span>💡</span>
                       <span>{errorMsg}</span>
                     </div>
                   )}

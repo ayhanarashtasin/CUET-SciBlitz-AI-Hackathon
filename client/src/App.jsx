@@ -21,6 +21,7 @@ import BackendStatusBanner from './components/system/BackendStatusBanner';
 // page only downloads its own JS/CSS (and heavy deps like react-pdf, katex,
 // framer-motion, socket.io) when it is actually visited, with automatic retry.
 import LandingPage from './pages/LandingPage';
+import GlobalNotificationListener from './components/notifications/GlobalNotificationListener';
 import lazyWithRetry from './utils/lazyWithRetry';
 
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
@@ -49,6 +50,7 @@ const ReadingBookView = lazyWithRetry(() => import('./pages/ReadingBookView'));
 const PracticeHistory = lazyWithRetry(() => import('./pages/PracticeHistory'));
 const StudyRoutinePage = lazyWithRetry(() => import('./pages/StudyRoutinePage'));
 const FindMentor = lazyWithRetry(() => import('./pages/FindMentor'));
+const MyClass = lazyWithRetry(() => import('./pages/MyClass'));
 const MentorLiveClass = lazyWithRetry(() => import('./pages/MentorLiveClass'));
 const StudentLiveClass = lazyWithRetry(() => import('./pages/StudentLiveClass'));
 const IeltsPrep = lazyWithRetry(() => import('./pages/IeltsPrep'));
@@ -100,6 +102,7 @@ function AppContent() {
   return (
     <>
       <BackendStatusBanner />
+      <GlobalNotificationListener />
       <Toaster
         position="top-right"
         toastOptions={{
@@ -137,6 +140,7 @@ function AppContent() {
           <Route path="/study-routine" element={<StudyRoutinePage />} />
           <Route path="/practice-history" element={<PracticeHistory />} />
           <Route path="/student/find-mentor" element={<FindMentor />} />
+          <Route path="/my-class" element={<MyClass />} />
           <Route path="/battle" element={<Battle />} />
           <Route path="/make-contest-question" element={<MakeContestQuestion />} />
           <Route path="/make-contest-question/next" element={<MakeContestQuestionNext />} />

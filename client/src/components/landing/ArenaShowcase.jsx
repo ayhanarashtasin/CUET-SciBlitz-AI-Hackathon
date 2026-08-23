@@ -60,7 +60,7 @@ export default function ArenaShowcase() {
             transition={{ delay: 0.3, duration: 0.7 }}
           >
             <div className="arena__board-header">
-              <span className="arena__board-title">🏆 Live Standings</span>
+              <span className="arena__board-title">Live Standings</span>
               <span className="arena__board-live">
                 <span className="arena__live-dot"></span>
                 LIVE

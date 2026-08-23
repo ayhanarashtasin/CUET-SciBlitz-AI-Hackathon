@@ -126,6 +126,7 @@ export function ForumProvider({ children }) {
     if (!socket || !connected) return;
 
     const off1 = on('notification:new', (notif) => {
+      if (notif?.type?.startsWith('mentor_')) return;
       const id = String(notif._id);
       if (!unreadNotificationIdsRef.current.has(id)) {
         unreadNotificationIdsRef.current.add(id);

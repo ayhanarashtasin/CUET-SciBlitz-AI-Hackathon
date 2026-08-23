@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { HiHome, HiAcademicCap, HiBookOpen, HiUpload, HiClipboardList, HiCalendar, HiLibrary, HiChatAlt2, HiLightningBolt, HiClipboardCheck, HiVideoCamera, HiSearch, HiMenu, HiX, HiLockClosed, HiSparkles, HiSupport, HiShieldExclamation } from 'react-icons/hi';
+import { HiHome, HiAcademicCap, HiBookOpen, HiUpload, HiClipboardList, HiCalendar, HiLibrary, HiChatAlt2, HiLightningBolt, HiClipboardCheck, HiVideoCamera, HiSearch, HiUserGroup, HiMenu, HiX, HiLockClosed, HiSparkles, HiSupport, HiShieldExclamation } from 'react-icons/hi';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useNavigate } from 'react-router-dom';
 import { usePlan } from '../../hooks/usePlan';
@@ -10,8 +10,18 @@ export default function Sidebar({ activeTab, user }) {
   const navigate = useNavigate();
   const { isMentorPro, plan: currentPlan, planExpiresAt, planIsTrial } = usePlan();
 
+  // Defensive defaults so the sidebar never crashes if the parent passes a
+  // partial `user` (e.g. during the initial render before /auth/me resolves).
+  const safeUser = {
+    name: 'Student',
+    avatar: '',
+    role: 'student',
+    ...(user || {})
+  };
+  const isMentor = safeUser.role === 'tutor' || safeUser.role === 'mentor';
+
   const getPlanInfoText = () => {
-    if (safeUser.role === 'tutor' || safeUser.role === 'teacher') {
+    if (isMentor || safeUser.role === 'teacher') {
       if (safeUser.role === 'teacher') return 'Institutional Teacher';
       if (!isMentorPro) return 'Free Plan (Requests Only)';
       
@@ -31,15 +41,6 @@ export default function Sidebar({ activeTab, user }) {
     }
     return null;
   };
-
-  // Defensive defaults so the sidebar never crashes if the parent passes a
-  // partial `user` (e.g. during the initial render before /auth/me resolves).
-  const safeUser = {
-    name: 'Student',
-    avatar: '',
-    role: 'student',
-    ...(user || {})
-  };
   const userInitial = (safeUser.name && safeUser.name.length)
     ? safeUser.name.charAt(0).toUpperCase()
     : 'S';
@@ -49,6 +50,22 @@ export default function Sidebar({ activeTab, user }) {
   );
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [hasUnreadClass, setHasUnreadClass] = useState(
+    () => localStorage.getItem('topkorbo_class_unread') === 'true'
+  );
+
+  useEffect(() => {
+    if (activeTab === 'my-class') {
+      setHasUnreadClass(false);
+      localStorage.removeItem('topkorbo_class_unread');
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleUnread = () => setHasUnreadClass(true);
+    window.addEventListener('topkorbo:class:unread', handleUnread);
+    return () => window.removeEventListener('topkorbo:class:unread', handleUnread);
+  }, []);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -72,25 +89,29 @@ export default function Sidebar({ activeTab, user }) {
     icon: <HiChatAlt2 size={20} />
   });
 
-  // Reading Books: shown to ALL roles (students browse, teachers preview their own uploads)
-  menuItems.push({
-    id: 'reading-books',
-    label: t('db.menu.reading_books'),
-    icon: <HiLibrary size={20} />
-  });
+  // Reading Books: shown to students and teachers (hidden for mentors)
+  if (!isMentor) {
+    menuItems.push({
+      id: 'reading-books',
+      label: t('db.menu.reading_books'),
+      icon: <HiLibrary size={20} />
+    });
+  }
 
   // Show Question Bank for students, tutors, and teachers
-  if (safeUser.role === 'student' || safeUser.role === 'tutor' || safeUser.role === 'teacher') {
+  if (safeUser.role === 'student' || isMentor || safeUser.role === 'teacher') {
     menuItems.push({
       id: 'qbank',
       label: t('db.menu.qbank'),
       icon: <HiBookOpen size={20} />
     });
-    menuItems.push({
-      id: 'study-routine',
-      label: language === 'en' ? 'Study Routine' : 'স্টাডি রুটিন',
-      icon: <HiCalendar size={20} />
-    });
+    if (!isMentor) {
+      menuItems.push({
+        id: 'study-routine',
+        label: language === 'en' ? 'Study Routine' : 'স্টাডি রুটিন',
+        icon: <HiCalendar size={20} />
+      });
+    }
     menuItems.push({
       id: 'mock-test',
       label: t('db.menu.mock_test'),
@@ -98,17 +119,24 @@ export default function Sidebar({ activeTab, user }) {
     });
     if (safeUser.role === 'student') {
       menuItems.push({
+        id: 'my-class',
+        label: language === 'en' ? 'My Class' : 'আমার ক্লাস',
+        icon: <HiUserGroup size={20} />
+      });
+      menuItems.push({
         id: 'find-mentor',
         label: 'Find Mentor',
         icon: <HiSearch size={20} />
       });
 
     }
-    menuItems.push({
-      id: 'practice-history',
-      label: t('db.menu.practice_history') || 'Practice History',
-      icon: <HiClipboardCheck size={20} />
-    });
+    if (!isMentor) {
+      menuItems.push({
+        id: 'practice-history',
+        label: t('db.menu.practice_history') || 'Practice History',
+        icon: <HiClipboardCheck size={20} />
+      });
+    }
     menuItems.push({
       id: 'battle',
       label: t('db.menu.battle') || 'Battle',
@@ -135,7 +163,7 @@ export default function Sidebar({ activeTab, user }) {
   }
 
   // Show teacher application tab only for tutors or approved teachers
-  if (safeUser.role === 'tutor' || safeUser.role === 'teacher') {
+  if (isMentor || safeUser.role === 'teacher') {
     menuItems.push({
       id: 'teacher',
       label: t('db.menu.teacher'),
@@ -144,7 +172,7 @@ export default function Sidebar({ activeTab, user }) {
   }
 
   // Show pricing plans for students and tutors
-  if (safeUser.role === 'student' || safeUser.role === 'tutor') {
+  if (safeUser.role === 'student' || isMentor) {
     menuItems.push({
       id: 'pricing',
       label: language === 'en' ? 'Premium Plans' : 'প্রিমিয়াম প্ল্যান',
@@ -187,7 +215,7 @@ export default function Sidebar({ activeTab, user }) {
 
   // ── Click handler (unchanged) ──
   const handleMenuClick = (item) => {
-    const isLockedForTutor = safeUser.role === 'tutor' && !isMentorPro && item.id !== 'dashboard' && item.id !== 'pricing' && item.id !== 'support';
+    const isLockedForTutor = isMentor && !isMentorPro && item.id !== 'dashboard' && item.id !== 'pricing' && item.id !== 'support';
     if (isLockedForTutor) {
       navigate('/pricing');
       return;
@@ -207,6 +235,7 @@ export default function Sidebar({ activeTab, user }) {
     else if (item.id === 'make-contest-question') navigate('/make-contest-question');
     else if (item.id === 'study-routine') navigate('/study-routine');
     else if (item.id === 'mock-test') navigate('/mock-test');
+    else if (item.id === 'my-class') navigate('/my-class');
     else if (item.id === 'find-mentor') navigate('/student/find-mentor');
     else if (item.id === 'practice-history') navigate('/practice-history');
     else if (item.id === 'battle') navigate('/battle');
@@ -232,7 +261,7 @@ export default function Sidebar({ activeTab, user }) {
     },
     {
       label: language === 'en' ? 'Learning' : 'শিক্ষা',
-      ids: ['study-routine', 'mock-test', 'find-mentor', 'practice-history', 'live-class', 'ielts-prep']
+      ids: ['my-class', 'study-routine', 'mock-test', 'find-mentor', 'practice-history', 'live-class', 'ielts-prep']
     },
     {
       label: language === 'en' ? 'Compete' : 'প্রতিযোগিতা',
@@ -271,15 +300,51 @@ export default function Sidebar({ activeTab, user }) {
 
   // ── Render a single menu button ──
   const renderMenuItem = (item) => {
-    const isLockedForTutor = safeUser.role === 'tutor' && !isMentorPro && item.id !== 'dashboard' && item.id !== 'pricing' && item.id !== 'support';
+    const isLockedForTutor = isMentor && !isMentorPro && item.id !== 'dashboard' && item.id !== 'pricing' && item.id !== 'support';
+    const showClassBadge = item.id === 'my-class' && hasUnreadClass && activeTab !== 'my-class';
+
     return (
       <li key={item.id}>
         <button
           onClick={() => handleMenuClick(item)}
           className={`dashboard-sidebar__menu-btn ${activeTab === item.id ? 'dashboard-sidebar__menu-btn--active' : ''} ${isLockedForTutor ? 'dashboard-sidebar__menu-btn--locked' : ''}`}
         >
-          <span className="dashboard-sidebar__menu-icon">{item.icon}</span>
-          <span className="dashboard-sidebar__menu-label">{item.label}</span>
+          <span className="dashboard-sidebar__menu-icon" style={{ position: 'relative' }}>
+            {item.icon}
+            {showClassBadge && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-2px',
+                  right: '-2px',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: '#B3261E',
+                  border: '1.5px solid #FAF4EE',
+                  boxShadow: '0 0 6px rgba(179, 38, 30, 0.7)'
+                }}
+              />
+            )}
+          </span>
+          <span className="dashboard-sidebar__menu-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            {item.label}
+            {showClassBadge && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  background: 'rgba(179, 38, 30, 0.15)',
+                  color: '#B3261E',
+                  lineHeight: '1.2'
+                }}
+              >
+                NEW
+              </span>
+            )}
+          </span>
           {isLockedForTutor && (
             <HiLockClosed className="dashboard-sidebar__menu-lock" title="Requires Mentor Pro Plan" />
           )}

@@ -119,22 +119,24 @@ export default function AiQuestionHelper() {
 
   const handleImageFile = useCallback(async (file) => {
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please choose an image file (PNG, JPG, etc.)');
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isImage && !isPdf) {
+      toast.error('Please choose an image (PNG, JPG) or PDF document.');
       return;
     }
     if (file.size > MAX_IMAGE_BYTES_RAW) {
-      toast.error('Image is too large. Please use a file under ~5 MB.');
+      toast.error('File is too large. Please use a file under ~5 MB.');
       return;
     }
     try {
       const dataUrl = await readFileAsDataUrl(file);
       const { mimeType, base64 } = splitDataUrl(dataUrl);
-      setImage({ mimeType, base64, name: file.name });
+      setImage({ mimeType: isPdf ? 'application/pdf' : mimeType, base64, name: file.name, isPdf });
       setErrorMsg('');
     } catch (err) {
       console.error('[AiQuestionHelper] failed to read file', err);
-      toast.error('Could not read the selected image.');
+      toast.error('Could not read the selected file.');
     }
   }, []);
 
@@ -292,18 +294,26 @@ export default function AiQuestionHelper() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.pdf,application/pdf"
                     onChange={onFileInputChange}
                     style={{ display: 'none' }}
                   />
 
-                  {imagePreviewSrc ? (
+                  {image ? (
                     <div className="aih-dropzone__preview">
-                      <img src={imagePreviewSrc} alt="Uploaded question" />
+                      {image.isPdf ? (
+                        <div style={{ padding: '24px', textAlign: 'center' }}>
+                          <HiOutlineDocumentText size={48} style={{ color: '#C08552', margin: '0 auto 8px' }} />
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--mc-n900, #2C2420)' }}>{image.name}</div>
+                          <span style={{ fontSize: '11px', color: 'var(--mc-n500, #8A7A70)' }}>PDF Document</span>
+                        </div>
+                      ) : (
+                        <img src={imagePreviewSrc} alt="Uploaded question" />
+                      )}
                       <div className="aih-dropzone__meta">
                         <span className="aih-dropzone__name">
-                          <HiOutlinePhotograph />
-                          {image?.name || 'image'}
+                          {image.isPdf ? <HiOutlineDocumentText /> : <HiOutlinePhotograph />}
+                          {image?.name || (image.isPdf ? 'document.pdf' : 'image')}
                         </span>
                         <button
                           type="button"
@@ -312,7 +322,7 @@ export default function AiQuestionHelper() {
                             e.stopPropagation();
                             clearImage();
                           }}
-                          aria-label="Remove image"
+                          aria-label="Remove file"
                         >
                           <HiOutlineX />
                           Remove
@@ -324,10 +334,10 @@ export default function AiQuestionHelper() {
                       <HiOutlineUpload size={28} />
                       <p>
                         <strong>Click to upload</strong> or drag &amp; drop an
-                        image of the question
+                        image or PDF of the question
                       </p>
                       <span className="aih-dropzone__hint">
-                        PNG, JPG, or handwritten photo — up to ~5 MB
+                        PNG, JPG, handwritten photo, or PDF question paper — up to ~5 MB
                       </span>
                     </div>
                   )}

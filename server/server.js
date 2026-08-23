@@ -302,6 +302,8 @@ app.use("/api/evaluate", evaluationRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/academic", academicRoutes);
 app.use("/api/mentor-connections", mentorRoutes);
+app.use("/api/mentor", mentorRoutes);
+app.use("/api/mentors", mentorRoutes);
 app.use("/api/mock-tests", mockTestRoutes);
 app.use("/api/live-class", liveClassRoutes);
 app.use("/api/ielts", ieltsRoutes);
