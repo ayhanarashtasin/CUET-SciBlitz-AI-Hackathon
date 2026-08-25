@@ -3,7 +3,7 @@
    Color Palette: #FFF9D2 → #FFEBCC → #BFDDF0 → #8CC0EB
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap');
+/* Fonts are loaded asynchronously and preloaded in index.html for maximum performance and zero render-blocking waterfall */
 
 /* ---- CSS Custom Properties ---- */
 :root {
@@ -222,8 +222,19 @@ img {
 button {
   cursor: pointer;
   border: none;
-  outline: none;
   font-family: inherit;
+}
+
+/* WCAG 2.1 AA Compliant Accessible Focus Indicator */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex="0"]:focus-visible {
+  outline: 2px solid var(--sky-blue) !important;
+  outline-offset: 3px !important;
 }
 
 ul,

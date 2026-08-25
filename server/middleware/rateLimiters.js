@@ -111,6 +111,15 @@ const uploadLimiter = rateLimit({
   message: message('Too many uploads. Please wait before uploading more.')
 });
 
+// Public waitlist submissions — prevents spam bot form stuffing
+const waitlistLimiter = rateLimit({
+  ...standard,
+  ...distributedStore('rl:waitlist:'),
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: message('Too many waitlist submissions from this IP. Please try again later.')
+});
+
 module.exports = {
   globalLimiter,
   authLimiter,
@@ -119,5 +128,6 @@ module.exports = {
   writeLimiter,
   annotationWriteLimiter,
   reportLimiter,
-  uploadLimiter
+  uploadLimiter,
+  waitlistLimiter
 };

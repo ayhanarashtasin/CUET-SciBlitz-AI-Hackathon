@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { useLanguage } from '../../hooks/useLanguage';
 import { GiSwordClash, GiShield, GiCastle, GiSpikyExplosion } from 'react-icons/gi';
@@ -74,6 +74,7 @@ function PlayerAvatar({ variant = "blue", size = "md" }) {
         border: '2px solid rgba(255, 255, 255, 0.95)',
         flexShrink: 0,
       }}
+      aria-hidden="true"
     >
       <FaUserGraduate />
     </div>
@@ -83,25 +84,28 @@ function PlayerAvatar({ variant = "blue", size = "md" }) {
 export default function BattleArena() {
   const { t } = useLanguage();
   const { ref, inView } = useInView({ threshold: 0.2, triggerOnce: true });
-  const [score1, setScore1] = useState(0);
-  const [score2, setScore2] = useState(0);
+  const prefersReducedMotion = useReducedMotion();
+  const [score1, setScore1] = useState(140);
+  const [score2, setScore2] = useState(125);
   const [timer, setTimer] = useState(45);
   const [activeMode, setActiveMode] = useState(0);
   const [raidEvents, setRaidEvents] = useState([RAID_EVENTS[0], RAID_EVENTS[1], RAID_EVENTS[2]]);
 
   useEffect(() => {
-    if (!inView) return;
+    if (!inView || prefersReducedMotion) return;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       setScore1(prev => prev + Math.floor(Math.random() * 30 + 10));
       setScore2(prev => prev + Math.floor(Math.random() * 25 + 8));
       setTimer(prev => (prev > 5 ? prev - Math.floor(Math.random() * 5 + 1) : 45));
     }, 2000);
     return () => clearInterval(interval);
-  }, [inView]);
+  }, [inView, prefersReducedMotion]);
 
   useEffect(() => {
-    if (activeMode !== 3) return;
+    if (activeMode !== 3 || prefersReducedMotion) return;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       setRaidEvents(prev => {
         const lastEvent = prev[prev.length - 1];
         const lastIdx = RAID_EVENTS.findIndex(e => e.text === lastEvent.text);
@@ -110,7 +114,7 @@ export default function BattleArena() {
       });
     }, 2500);
     return () => clearInterval(interval);
-  }, [activeMode]);
+  }, [activeMode, prefersReducedMotion]);
 
   const getEventIcon = (type) => {
     switch (type) {

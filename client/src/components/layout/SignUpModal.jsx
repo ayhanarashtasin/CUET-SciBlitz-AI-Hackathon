@@ -528,16 +528,18 @@ export default function SignUpModal({ isOpen, onClose, initialMode = 'signup' })
     setLoading(true);
     setErrorMsg('');
 
-    if (!formData.phoneNumber.trim()) {
+    const cleanedPhone = formData.phoneNumber.replace(/\D/g, '');
+    if (!cleanedPhone) {
       setErrorMsg('Phone number is required.');
       setLoading(false);
       return;
     }
-    if (formData.phoneNumber.length !== 10) {
-      setErrorMsg('Please enter a valid 10-digit phone number.');
+    if (!/^(?:1[3-9]\d{8}|01[3-9]\d{8})$/.test(cleanedPhone)) {
+      setErrorMsg('Please enter a valid Bangladeshi mobile number (e.g. 017XXXXXXXX).');
       setLoading(false);
       return;
     }
+    const finalTenDigits = cleanedPhone.length === 11 && cleanedPhone.startsWith('0') ? cleanedPhone.slice(1) : cleanedPhone;
 
     try {
       const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -551,7 +553,7 @@ export default function SignUpModal({ isOpen, onClose, initialMode = 'signup' })
           'Authorization': `Bearer ${token || 'mock_development_token'}`
         },
         body: JSON.stringify({
-          phoneNumber: `+880${formData.phoneNumber}`
+          phoneNumber: `+880${finalTenDigits}`
         })
       });
 

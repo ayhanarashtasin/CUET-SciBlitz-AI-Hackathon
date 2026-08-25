@@ -1,0 +1,8 @@
+﻿User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /setting
+Disallow: /settings
+
+Sitemap: https://topkorbo.com/sitemap.xml

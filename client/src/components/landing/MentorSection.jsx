@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
+import { Link } from 'react-router-dom';
 import { useLanguage } from '../../hooks/useLanguage';
 import { HiOutlineStar, HiOutlineUserGroup, HiOutlineBadgeCheck } from 'react-icons/hi';
 import './MentorSection.css';
@@ -14,15 +15,16 @@ const MENTORS = [
 
 export default function MentorSection() {
   const { t } = useLanguage();
+  const prefersReducedMotion = useReducedMotion();
   const { ref, inView } = useInView({ threshold: 0.2, triggerOnce: true });
 
   return (
-    <section className="mentors section" id="mentors" ref={ref}>
+    <section className="mentors section" id="mentors" ref={ref} aria-label="Expert University Mentors">
       <div className="container">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.6 }}
         >
           <h2 className="section-title">{t('mentor.title')}</h2>
           <p className="section-subtitle">{t('mentor.subtitle')}</p>
@@ -34,14 +36,14 @@ export default function MentorSection() {
               <motion.div
                 className="mentors__card card"
                 key={i}
-                initial={{ opacity: 0, y: 30 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 30 }}
                 animate={inView ? { opacity: 1, y: 0 } : {}}
-                transition={{ delay: 0.2 + i * 0.1, duration: 0.5 }}
+                transition={prefersReducedMotion ? { duration: 0 } : { delay: 0.2 + i * 0.1, duration: 0.5 }}
               >
                 <div className="mentors__card-header">
-                  <div className="mentors__avatar">{mentor.emoji}</div>
+                  <div className="mentors__avatar" aria-hidden="true">{mentor.emoji}</div>
                   <span className="mentors__verified badge badge-blue">
-                    <HiOutlineBadgeCheck /> {t('mentor.verified')}
+                    <HiOutlineBadgeCheck aria-hidden="true" /> {t('mentor.verified')}
                   </span>
                 </div>
 
@@ -52,10 +54,10 @@ export default function MentorSection() {
                 <p className="mentors__rank">{mentor.rank}</p>
 
                 <div className="mentors__rating">
-                  <HiOutlineStar className="mentors__star" />
+                  <HiOutlineStar className="mentors__star" aria-hidden="true" />
                   <span>{mentor.rating}</span>
-                  <span className="mentors__separator">•</span>
-                  <HiOutlineUserGroup />
+                  <span className="mentors__separator" aria-hidden="true">•</span>
+                  <HiOutlineUserGroup aria-hidden="true" />
                   <span>{mentor.students} {t('mentor.students')}</span>
                 </div>
 
@@ -65,9 +67,13 @@ export default function MentorSection() {
                   ))}
                 </div>
 
-                <button className={`btn ${mentor.students >= 30 ? 'btn-secondary' : 'btn-primary'} btn-sm mentors__btn`}>
+                <Link 
+                  to="/student/find-mentor" 
+                  className={`btn ${mentor.students >= 30 ? 'btn-secondary' : 'btn-primary'} btn-sm mentors__btn`}
+                  aria-label={`${mentor.students >= 30 ? 'Join waitlist for' : 'Book guidance session with'} ${mentor.name}`}
+                >
                   {mentor.students >= 30 ? t('mentor.waitlist') : t('mentor.book')}
-                </button>
+                </Link>
               </motion.div>
             ))}
           </div>

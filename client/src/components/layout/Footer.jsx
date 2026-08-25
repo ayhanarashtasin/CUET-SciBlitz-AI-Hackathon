@@ -55,10 +55,10 @@ export default function Footer() {
               <HiHeart className="footer__heart" />
             </p>
             <div className="footer__socials">
-              <a href="#" className="footer__social-link" aria-label="Facebook"><FaFacebookF /></a>
-              <a href="#" className="footer__social-link" aria-label="YouTube"><FaYoutube /></a>
-              <a href="#" className="footer__social-link" aria-label="LinkedIn"><FaLinkedinIn /></a>
-              <a href="#" className="footer__social-link" aria-label="GitHub"><FaGithub /></a>
+              <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="footer__social-link" aria-label="Visit TopKorbo on Facebook"><FaFacebookF aria-hidden="true" /></a>
+              <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="footer__social-link" aria-label="Visit TopKorbo on YouTube"><FaYoutube aria-hidden="true" /></a>
+              <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="footer__social-link" aria-label="Visit TopKorbo on LinkedIn"><FaLinkedinIn aria-hidden="true" /></a>
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="footer__social-link" aria-label="Visit TopKorbo on GitHub"><FaGithub aria-hidden="true" /></a>
             </div>
           </div>
 

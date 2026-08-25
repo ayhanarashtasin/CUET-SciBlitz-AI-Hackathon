@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { useLanguage } from '../../hooks/useLanguage';
 import { HiOutlineTrendingUp, HiOutlineChartBar, HiOutlineFire, HiOutlineStatusOnline } from 'react-icons/hi';
@@ -18,11 +18,13 @@ const LEADERBOARD = [
 export default function ArenaShowcase() {
   const { t } = useLanguage();
   const { ref, inView } = useInView({ threshold: 0.2, triggerOnce: true });
+  const prefersReducedMotion = useReducedMotion();
   const [activeRows, setActiveRows] = useState(LEADERBOARD);
 
   useEffect(() => {
-    if (!inView) return;
+    if (!inView || prefersReducedMotion) return;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       setActiveRows(prev => {
         const arr = [...prev];
         const i = Math.floor(Math.random() * (arr.length - 1)) + 1;
@@ -31,13 +33,13 @@ export default function ArenaShowcase() {
       });
     }, 3000);
     return () => clearInterval(interval);
-  }, [inView]);
+  }, [inView, prefersReducedMotion]);
 
   const featureCards = [
-    { icon: <HiOutlineTrendingUp />, title: t('arena.rating_system'), desc: t('arena.rating_desc') },
-    { icon: <HiOutlineChartBar />, title: t('arena.divisions'), desc: t('arena.divisions_desc') },
-    { icon: <HiOutlineFire />, title: t('arena.streaks'), desc: t('arena.streaks_desc') },
-    { icon: <HiOutlineStatusOnline />, title: t('arena.live'), desc: t('arena.live_desc') },
+    { icon: <HiOutlineTrendingUp aria-hidden="true" />, title: t('arena.rating_system'), desc: t('arena.rating_desc') },
+    { icon: <HiOutlineChartBar aria-hidden="true" />, title: t('arena.divisions'), desc: t('arena.divisions_desc') },
+    { icon: <HiOutlineFire aria-hidden="true" />, title: t('arena.streaks'), desc: t('arena.streaks_desc') },
+    { icon: <HiOutlineStatusOnline aria-hidden="true" />, title: t('arena.live'), desc: t('arena.live_desc') },
   ];
 
   return (

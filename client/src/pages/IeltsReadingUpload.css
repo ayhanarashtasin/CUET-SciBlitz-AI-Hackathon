@@ -15,12 +15,10 @@
   height: 100%;
   overflow: hidden;
   background:
-    /* Vertical margin line (notebook left margin) */
-    linear-gradient(90deg, transparent 79px, rgba(192, 133, 82, 0.25) 79px, rgba(192, 133, 82, 0.25) 80px, transparent 80px),
     /* Horizontal ruled lines */
     linear-gradient(rgba(192, 133, 82, 0.12) 1px, transparent 1px),
     #FAF4EE;
-  background-size: 100% 100%, 100% 32px, 100% 100%;
+  background-size: 100% 32px, 100% 100%;
 }
 
 .ielts-reading-upload-header {

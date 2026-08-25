@@ -73,18 +73,7 @@
   box-sizing: border-box;
 }
 
-/* Left subtle academic notebook rule for wide screens */
-.study-routine-main::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 80px;
-  bottom: 0;
-  width: 2px;
-  background: rgba(192, 133, 82, 0.12);
-  pointer-events: none;
-  z-index: 0;
-}
+
 
 .study-routine-main > * {
   position: relative;
