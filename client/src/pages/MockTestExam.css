@@ -1866,3 +1866,56 @@
         margin-bottom: 20px;
     }
 }
+
+/* ── Tab-switch allowance meter ──────────────────────────────────────────────
+   Sits just under the proctor PiP camera (which is fixed at top-right) so the
+   student can always see how many of their tab-switch warnings are spent. */
+.exam-tab-switch-meter {
+    position: fixed;
+    top: 250px;
+    right: 16px;
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 200px;
+    padding: 7px 10px;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.92);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+    color: #fcd34d;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+.exam-tab-switch-meter--critical {
+    border-color: rgba(239, 68, 68, 0.6);
+    color: #fca5a5;
+}
+
+.exam-tab-switch-meter__count {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.exam-tab-switch-meter__label {
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .exam-tab-switch-meter {
+        top: calc(160px + env(safe-area-inset-top, 0px));
+        right: 12px;
+        max-width: 140px;
+        z-index: 99999;
+        font-size: 9px;
+    }
+
+    .exam-tab-switch-meter__count {
+        font-size: 12px;
+    }
+}

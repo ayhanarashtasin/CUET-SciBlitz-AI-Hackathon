@@ -268,3 +268,25 @@
     font-size: 14px;
   }
 }
+
+/* ── Stowed (minimized) panel ─────────────────────────────────────────────
+   When the student minimizes the widget the panel is parked offscreen rather
+   than unmounted or hidden, because the AI proctor keeps reading frames from
+   the <video> inside it. `display: none` / `visibility: hidden` let browsers
+   stop delivering frames to the element, which would stall detection; an
+   offscreen but still-laid-out box keeps the stream decoding normally.
+
+   Declared last in the file so it also overrides the mobile media query above
+   at equal specificity. */
+.proctor-pip--stowed {
+  top: 0;
+  left: -10000px;
+  right: auto;
+  opacity: 0;
+  pointer-events: none;
+  /* Nothing is visible, so don't pay for effects or the alert animation. */
+  animation: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  transition: none;
+}

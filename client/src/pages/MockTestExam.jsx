@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../hooks/useLanguage";
 import useSocket from "../hooks/useSocket";
@@ -24,6 +24,107 @@ import { buildAttemptPayload, submitAttempt as savePracticeAttempt } from "../se
 import { submitAnswer as submitContestAnswer } from "../services/contestApi";
 import ProctorPipCamera from "../components/proctor/ProctorPipCamera";
 import "./MockTestExam.css";
+
+// ── Contest anti-cheat tuning ────────────────────────────────────────────────
+// How many tab switches / focus losses a student is merely WARNED about. The
+// contest only ends on the one after that, i.e. the 3rd switch when this is 2.
+const MAX_TAB_SWITCH_WARNINGS = 2;
+// One real tab switch fires BOTH `blur` and `visibilitychange`, and alt-tabbing
+// back can fire another pair. Collapse everything inside this window into a
+// single counted violation, otherwise "2 allowed" silently becomes "1 allowed".
+const TAB_SWITCH_DEDUPE_MS = 1500;
+// The browser's camera-permission prompt takes focus away from the page, which
+// looks exactly like a tab switch. Suppress detection for the whole permission
+// phase plus this settle window after it ends (focus returns a beat late).
+const PROCTOR_PERMISSION_GRACE_MS = 2500;
+// Ceiling on that suppression so a student cannot park an unanswered permission
+// prompt on screen and then alt-tab freely for the whole exam.
+const PROCTOR_GRACE_CEILING_MS = 60000;
+// Proctor statuses during which the camera permission prompt may be on screen.
+const PROCTOR_PERMISSION_STATUSES = new Set(["idle", "requesting_camera"]);
+
+// ── Tab-switch counter storage ───────────────────────────────────────────────
+// Keyed PER CONTEST and kept in localStorage, not sessionStorage, because the
+// count has to outlive everything a student can do short of finishing the
+// attempt: leaving the exam back to /contests and re-joining, reloading, or
+// reopening the contest in a fresh tab. A per-contest key also means starting a
+// DIFFERENT contest naturally begins at zero without clearing anything.
+const TAB_SWITCH_KEY_PREFIX = "topkorbo_tab_switches:";
+// Abandoned attempts would otherwise leave their key behind forever.
+const TAB_SWITCH_RECORD_TTL_MS = 24 * 60 * 60 * 1000;
+
+function readTabSwitchCount(contestId) {
+  if (!contestId) return 0;
+  try {
+    const raw = localStorage.getItem(TAB_SWITCH_KEY_PREFIX + contestId);
+    if (!raw) return 0;
+    const record = JSON.parse(raw);
+    if (!record || typeof record.count !== "number") return 0;
+    if (Date.now() - (record.updatedAt || 0) > TAB_SWITCH_RECORD_TTL_MS) {
+      localStorage.removeItem(TAB_SWITCH_KEY_PREFIX + contestId);
+      return 0;
+    }
+    return record.count;
+  } catch {
+    return 0;
+  }
+}
+
+function writeTabSwitchCount(contestId, count) {
+  if (!contestId) return;
+  try {
+    localStorage.setItem(
+      TAB_SWITCH_KEY_PREFIX + contestId,
+      JSON.stringify({ count, updatedAt: Date.now() })
+    );
+  } catch {
+    // Storage full or blocked — the in-memory ref still enforces the limit for
+    // this session, so keep going rather than breaking the exam.
+  }
+}
+
+// Called only when an attempt genuinely ends (submitted, auto-submitted, or
+// disqualified) — never on contest entry, which is what let a student reset
+// their used warnings just by leaving and re-joining.
+function clearTabSwitchCount(contestId) {
+  if (!contestId) return;
+  try {
+    localStorage.removeItem(TAB_SWITCH_KEY_PREFIX + contestId);
+  } catch {
+    // Ignore — nothing depends on the removal succeeding.
+  }
+}
+
+// One-time sweep of records left behind by abandoned attempts.
+function pruneTabSwitchRecords() {
+  try {
+    const stale = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(TAB_SWITCH_KEY_PREFIX)) continue;
+      try {
+        const record = JSON.parse(localStorage.getItem(key));
+        if (Date.now() - (record?.updatedAt || 0) > TAB_SWITCH_RECORD_TTL_MS) stale.push(key);
+      } catch {
+        stale.push(key); // Unparseable — drop it.
+      }
+    }
+    stale.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // Ignore — pruning is housekeeping, never required for correctness.
+  }
+}
+
+// The contest id is needed before `config` state has hydrated, so read it
+// straight from the persisted config the contest page wrote.
+function readStoredContestId() {
+  try {
+    const raw = sessionStorage.getItem("mock_exam_config");
+    return raw ? JSON.parse(raw)?.contestId || null : null;
+  } catch {
+    return null;
+  }
+}
 
 // ── Abbreviation Maps ───────────────────────────────────────────────────────
 // Used to render compact source tags on questions (e.g., "DB-24" for Dhaka Board 2024).
@@ -202,6 +303,26 @@ export default function MockTestExam() {
   const followUpFileRef = useRef(null);
   const hasCheatedRef = useRef(false);
   const lastMetaTimeRef = useRef(0);
+
+  // ── Tab-switch tolerance ───────────────────────────────────────────────────
+  // Counted across reloads via sessionStorage so refreshing the page cannot
+  // reset a student's used-up warnings mid-contest.
+  const [tabSwitchCount, setTabSwitchCount] = useState(() =>
+    readTabSwitchCount(readStoredContestId())
+  );
+  const tabSwitchCountRef = useRef(tabSwitchCount);
+
+  // Drop records left behind by attempts that were never finished.
+  useEffect(() => {
+    pruneTabSwitchRecords();
+  }, []);
+  const lastTabSwitchAtRef = useRef(0);
+  // Timestamp until which focus loss is attributed to the camera-permission
+  // prompt rather than to cheating. Starts suppressed: the prompt is shown
+  // within a few hundred ms of the exam screen mounting, and the proctor
+  // reports its real status a tick later.
+  const proctorGraceUntilRef = useRef(Number.POSITIVE_INFINITY);
+  const proctorGraceCeilingRef = useRef(0);
 
   // ── Navigation State ───────────────────────────────────────────────────────
   // Tracks which question is active, which have been submitted (contest mode),
@@ -390,6 +511,26 @@ export default function MockTestExam() {
 
   const isContestActive = !!(config?.contestId && !config?.isPractice && !isReviewMode && !isSubmitted);
 
+  // The AI proctor tells us when the camera-permission prompt is on screen.
+  // That prompt takes focus away from the page, which is indistinguishable from
+  // a tab switch — and used to end the contest the instant a student entered it.
+  // While the proctor is in a permission state we suppress focus-loss detection
+  // entirely, then keep it suppressed for a short settle window afterwards.
+  const handleProctorStatusChange = useCallback((nextStatus) => {
+    const now = Date.now();
+    if (PROCTOR_PERMISSION_STATUSES.has(nextStatus)) {
+      proctorGraceUntilRef.current = Number.POSITIVE_INFINITY;
+      if (!proctorGraceCeilingRef.current) {
+        proctorGraceCeilingRef.current = now + PROCTOR_GRACE_CEILING_MS;
+      }
+    } else {
+      // Camera settled (active / camera_ready / camera_only) or failed (error).
+      // Focus is coming back to the page — give it a moment, then arm.
+      proctorGraceUntilRef.current = now + PROCTOR_PERMISSION_GRACE_MS;
+      proctorGraceCeilingRef.current = 0;
+    }
+  }, []);
+
   const timeLeftRef = useRef(timeLeft);
   useEffect(() => {
     timeLeftRef.current = timeLeft;
@@ -460,6 +601,8 @@ export default function MockTestExam() {
       "mock_exam_visited_indexes",
       "mock_exam_active_idx",
     ].forEach((key) => sessionStorage.removeItem(key));
+    // The attempt is over, so its tab-switch allowance can be released.
+    clearTabSwitchCount(config?.contestId);
 
     navigate("/contests");
   };
@@ -470,15 +613,79 @@ export default function MockTestExam() {
   useEffect(() => {
     if (!isContestActive) return;
 
+    // Arm the ceiling on the camera-permission grace period the moment the
+    // contest goes live, so the grace can never outlive the prompt itself.
+    if (!proctorGraceCeilingRef.current) {
+      proctorGraceCeilingRef.current = Date.now() + PROCTOR_GRACE_CEILING_MS;
+    }
+
     const handleViolation = (reason) => {
       if (hasCheatedRef.current) return;
       hasCheatedRef.current = true;
       submitDisqualification(reason);
     };
 
+    // True while the camera-permission prompt is (or may still be) stealing
+    // focus from the page. Focus loss in that window is the browser's doing,
+    // not the student's, so it must never count as a tab switch.
+    const isInProctorGrace = () => {
+      const now = Date.now();
+      if (proctorGraceCeilingRef.current && now > proctorGraceCeilingRef.current) {
+        return false;
+      }
+      return now < proctorGraceUntilRef.current;
+    };
+
+    // A tab switch is warned about MAX_TAB_SWITCH_WARNINGS times and only ends
+    // the contest on the one after that.
+    const registerTabSwitch = (reason) => {
+      if (hasCheatedRef.current) return;
+      if (isInProctorGrace()) return;
+
+      const now = Date.now();
+      // One real tab switch fires both `blur` and `visibilitychange`; collapse
+      // them so a single switch costs a single warning.
+      if (now - lastTabSwitchAtRef.current < TAB_SWITCH_DEDUPE_MS) return;
+      lastTabSwitchAtRef.current = now;
+
+      // Read the persisted value rather than trusting the in-memory ref: the
+      // student may have left the exam and re-joined since the last switch, in
+      // which case this component remounted with a fresh ref.
+      const contestId = config?.contestId;
+      const count = Math.max(readTabSwitchCount(contestId), tabSwitchCountRef.current) + 1;
+      tabSwitchCountRef.current = count;
+      setTabSwitchCount(count);
+      writeTabSwitchCount(contestId, count);
+
+      if (count > MAX_TAB_SWITCH_WARNINGS) {
+        handleViolation(
+          language === "en"
+            ? `${reason} (${count} times — limit is ${MAX_TAB_SWITCH_WARNINGS})`
+            : `${reason} (${count} বার — সর্বোচ্চ ${MAX_TAB_SWITCH_WARNINGS} বার অনুমোদিত)`
+        );
+        return;
+      }
+
+      const remaining = MAX_TAB_SWITCH_WARNINGS - count;
+      toast.error(
+        language === "en"
+          ? `Warning ${count}/${MAX_TAB_SWITCH_WARNINGS}: ${reason}. ${
+              remaining === 0
+                ? "Switching away once more will end your contest."
+                : `You may switch away ${remaining} more time before the contest ends.`
+            }`
+          : `সতর্কতা ${count}/${MAX_TAB_SWITCH_WARNINGS}: ${reason}। ${
+              remaining === 0
+                ? "আর একবার ট্যাব পরিবর্তন করলে কনটেস্ট শেষ হয়ে যাবে।"
+                : `কনটেস্ট শেষ হওয়ার আগে আপনি আর ${remaining} বার ট্যাব পরিবর্তন করতে পারবেন।`
+            }`,
+        { duration: 6000, icon: "⚠️" }
+      );
+    };
+
     // Window lost focus (tab switch, alt-tab, minimization)
     const handleBlur = () => {
-      handleViolation(
+      registerTabSwitch(
         language === "en"
           ? "Window lost focus / minimised / tab changed"
           : "উইন্ডো ফোকাস হারিয়েছে / মিনিমাইজ করা হয়েছে / ট্যাব পরিবর্তন করা হয়েছে"
@@ -487,7 +694,7 @@ export default function MockTestExam() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        handleViolation(
+        registerTabSwitch(
           language === "en"
             ? "Tab switched or window minimised"
             : "ট্যাব পরিবর্তন করা হয়েছে বা উইন্ডো মিনিমাইজ করা হয়েছে"
@@ -867,6 +1074,8 @@ export default function MockTestExam() {
           "mock_exam_visited_indexes",
           "mock_exam_active_idx",
         ].forEach((key) => sessionStorage.removeItem(key));
+        // The attempt is over, so its tab-switch allowance can be released.
+        clearTabSwitchCount(config?.contestId);
 
         // Redirect directly to /contests
         navigate("/contests");
@@ -1077,6 +1286,8 @@ export default function MockTestExam() {
         "mock_exam_visited_indexes",
         "mock_exam_active_idx",
       ].forEach((key) => sessionStorage.removeItem(key));
+      // The attempt is over, so its tab-switch allowance can be released.
+      clearTabSwitchCount(config?.contestId);
 
       navigate("/contests");
       return;
@@ -1118,6 +1329,8 @@ export default function MockTestExam() {
       "mock_exam_written_answers",
       "mock_exam_ai_evals",
     ].forEach((key) => sessionStorage.removeItem(key));
+    // The attempt is over, so its tab-switch allowance can be released.
+    clearTabSwitchCount(config?.contestId);
     navigate(isContest ? "/contests" : fromQbank ? "/qbank" : "/mock-test");
   };
 
@@ -1534,6 +1747,7 @@ export default function MockTestExam() {
         contestId={config?.contestId}
         enabled={isContestActive}
         maxViolations={3}
+        onStatusChange={handleProctorStatusChange}
         onViolation={(violation) => {
           toast.error(
             language === "en"
@@ -1543,6 +1757,31 @@ export default function MockTestExam() {
           );
         }}
       />
+
+      {/* Tab-switch allowance. Rendered from persisted state so a student who
+          reloads still sees how many warnings they have already used. */}
+      {isContestActive && tabSwitchCount > 0 && (
+        <div
+          className={`exam-tab-switch-meter ${
+            tabSwitchCount >= MAX_TAB_SWITCH_WARNINGS ? "exam-tab-switch-meter--critical" : ""
+          }`}
+          role="status"
+        >
+          <span className="exam-tab-switch-meter__count">
+            {tabSwitchCount}/{MAX_TAB_SWITCH_WARNINGS}
+          </span>
+          <span className="exam-tab-switch-meter__label">
+            {language === "en"
+              ? tabSwitchCount >= MAX_TAB_SWITCH_WARNINGS
+                ? "Tab switches used — one more ends the contest"
+                : "Tab switches used"
+              : tabSwitchCount >= MAX_TAB_SWITCH_WARNINGS
+                ? "ট্যাব পরিবর্তন — আর একবারেই কনটেস্ট শেষ"
+                : "ট্যাব পরিবর্তন ব্যবহৃত"}
+          </span>
+        </div>
+      )}
+
       <div className="exam-layout-wrapper">
         <div className="exam-main-content">
           <header
