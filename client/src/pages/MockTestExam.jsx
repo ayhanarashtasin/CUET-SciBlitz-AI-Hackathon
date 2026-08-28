@@ -324,6 +324,28 @@ export default function MockTestExam() {
   const proctorGraceUntilRef = useRef(Number.POSITIVE_INFINITY);
   const proctorGraceCeilingRef = useRef(0);
 
+  // ── Written/CQ Answer File Upload Grace Period ─────────────────────────────
+  // Opening a native OS file picker dialog or camera app to upload an answer
+  // for a written/CQ question causes `blur` and `visibilitychange` (hidden)
+  // events. We mark when an answer file upload/camera capture is initiated,
+  // giving a grace window until the file is picked and focus returns.
+  const isAnswerFileUploadActiveRef = useRef(false);
+  const answerFileUploadGraceUntilRef = useRef(0);
+  const ANSWER_FILE_UPLOAD_GRACE_MAX_MS = 120000; // 2 min max ceiling while picker/camera app is open
+  const ANSWER_FILE_UPLOAD_SETTLE_MS = 5000; // 5 sec settle window after focus/file change returns
+
+  const markAnswerFileUploadStarted = useCallback(() => {
+    isAnswerFileUploadActiveRef.current = true;
+    answerFileUploadGraceUntilRef.current = Date.now() + ANSWER_FILE_UPLOAD_GRACE_MAX_MS;
+  }, []);
+
+  const markAnswerFileUploadEnded = useCallback(() => {
+    answerFileUploadGraceUntilRef.current = Date.now() + ANSWER_FILE_UPLOAD_SETTLE_MS;
+    setTimeout(() => {
+      isAnswerFileUploadActiveRef.current = false;
+    }, ANSWER_FILE_UPLOAD_SETTLE_MS);
+  }, []);
+
   // ── Navigation State ───────────────────────────────────────────────────────
   // Tracks which question is active, which have been submitted (contest mode),
   // and which have been visited (for the colored-dot navigator).
@@ -636,11 +658,20 @@ export default function MockTestExam() {
       return now < proctorGraceUntilRef.current;
     };
 
+    const isUploadingAnswerFile = () => {
+      const now = Date.now();
+      if (activeCameraQuestionKey) return true;
+      if (isAnswerFileUploadActiveRef.current) return true;
+      if (now < answerFileUploadGraceUntilRef.current) return true;
+      return false;
+    };
+
     // A tab switch is warned about MAX_TAB_SWITCH_WARNINGS times and only ends
     // the contest on the one after that.
     const registerTabSwitch = (reason) => {
       if (hasCheatedRef.current) return;
       if (isInProctorGrace()) return;
+      if (isUploadingAnswerFile()) return; // Suppress tab-switch when user is uploading answer file / taking photo for written/CQ question
 
       const now = Date.now();
       // One real tab switch fires both `blur` and `visibilitychange`; collapse
@@ -783,7 +814,14 @@ export default function MockTestExam() {
       e.preventDefault();
     };
 
+    const handleFocus = () => {
+      if (isAnswerFileUploadActiveRef.current || answerFileUploadGraceUntilRef.current > Date.now()) {
+        markAnswerFileUploadEnded();
+      }
+    };
+
     // Attach listeners
+    window.addEventListener("focus", handleFocus);
     window.addEventListener("blur", handleBlur);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("keydown", handleKeyDown);
@@ -794,6 +832,7 @@ export default function MockTestExam() {
     document.addEventListener("selectstart", preventCopy);
 
     return () => {
+      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("blur", handleBlur);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("keydown", handleKeyDown);
@@ -1004,9 +1043,17 @@ export default function MockTestExam() {
   };
 
   const handleContestQuestionSubmit = async (index) => {
-    const key = getQuestionKey(questions[index], index);
-    if (answers[key] === undefined) {
-      toast.error(language === "en" ? "Please select an option first." : "দয়া করে প্রথমে একটি উত্তর নির্বাচন করুন।");
+    const currentQuestion = questions[index];
+    const key = getQuestionKey(currentQuestion, index);
+    const isWrittenOrCq = currentQuestion?.type === "written" || currentQuestion?.type === "cq";
+    const isAnswered = answers[key] !== undefined || (isWrittenOrCq && !!writtenAnswers[key]);
+
+    if (!isAnswered) {
+      toast.error(
+        language === "en"
+          ? (isWrittenOrCq ? "Please upload an answer image or select an option first." : "Please select an option first.")
+          : (isWrittenOrCq ? "দয়া করে প্রথমে একটি উত্তর ছবি আপলোড করুন অথবা অপশন সিলেক্ট করুন।" : "দয়া করে প্রথমে একটি উত্তর নির্বাচন করুন।")
+      );
       return;
     }
 
@@ -1021,19 +1068,28 @@ export default function MockTestExam() {
     let liveAnswerResult;
     if (!config?.isPractice) {
       try {
-        liveAnswerResult = await submitContestAnswer(config.contestId, key, answers[key]);
-        if (liveAnswerResult?.correct) {
+        if (answers[key] !== undefined) {
+          liveAnswerResult = await submitContestAnswer(config.contestId, key, answers[key]);
+          if (liveAnswerResult?.correct) {
+            toast.success(
+              language === "en"
+                ? `Correct! +${liveAnswerResult.pointsDelta} pts (total ${liveAnswerResult.livePoints})`
+                : `সঠিক! +${liveAnswerResult.pointsDelta} (মোট ${liveAnswerResult.livePoints})`,
+              { duration: 1800 }
+            );
+          } else {
+            toast.error(
+              language === "en"
+                ? `Wrong — penalty applied (total ${liveAnswerResult?.livePoints ?? 0} pts)`
+                : `ভুল — পেনাল্টি (মোট ${liveAnswerResult?.livePoints ?? 0})`,
+              { duration: 1800 }
+            );
+          }
+        } else if (isWrittenOrCq && writtenAnswers[key]) {
           toast.success(
             language === "en"
-              ? `Correct! +${liveAnswerResult.pointsDelta} pts (total ${liveAnswerResult.livePoints})`
-              : `সঠিক! +${liveAnswerResult.pointsDelta} (মোট ${liveAnswerResult.livePoints})`,
-            { duration: 1800 }
-          );
-        } else {
-          toast.error(
-            language === "en"
-              ? `Wrong — penalty applied (total ${liveAnswerResult?.livePoints ?? 0} pts)`
-              : `ভুল — পেনাল্টি (মোট ${liveAnswerResult?.livePoints ?? 0})`,
+              ? `Written response saved for Question ${index + 1}!`
+              : `প্রশ্ন ${index + 1} এর জন্য লিখিত উত্তর সেভ হয়েছে!`,
             { duration: 1800 }
           );
         }
@@ -1378,6 +1434,7 @@ export default function MockTestExam() {
   };
 
   const handleWrittenFileChange = (e, questionKey) => {
+    markAnswerFileUploadEnded();
     const file = e.target.files[0];
     if (!file) return;
 
@@ -1409,6 +1466,7 @@ export default function MockTestExam() {
   // Activates the device camera (prefers back-facing for document capture),
   // captures a photo, resizes it, and stores as base64 in writtenAnswers.
   const startCamera = async (questionKey) => {
+    markAnswerFileUploadStarted();
     setActiveCameraQuestionKey(questionKey);
     try {
       let stream;
@@ -1441,6 +1499,7 @@ export default function MockTestExam() {
           : "ক্যামেরা অ্যাক্সেস করা যাচ্ছে না। দয়া করে পারমিশন চেক করুন।",
       );
       setActiveCameraQuestionKey(null);
+      markAnswerFileUploadEnded();
     }
   };
 
@@ -1450,6 +1509,7 @@ export default function MockTestExam() {
       streamRef.current = null;
     }
     setActiveCameraQuestionKey(null);
+    markAnswerFileUploadEnded();
   };
 
   const capturePhoto = (questionKey) => {
@@ -1821,7 +1881,7 @@ export default function MockTestExam() {
                     <strong>★ {formatDisplayNumber(resultStats.score)}</strong>
                   </div>
                   <div className="exam-report-card exam-report-card--marks">
-                    {questions.some((q) => q.type === "written") ? (
+                    {questions.some((q) => q.type === "written" || q.type === "cq") ? (
                       <>
                         <span>
                           {language === "en"
@@ -2115,7 +2175,7 @@ export default function MockTestExam() {
                       </div>
                     )}
 
-                    {q.type === "written" && q.options && q.options.length > 0 && (
+                    {(q.type === "written" || q.type === "cq") && q.options && q.options.length > 0 && (
                       <div className="exam-options-grid">
                         {q.options.map((opt, optIdx) => {
                           const isSelected = answers[questionKey] === optIdx;
@@ -2149,7 +2209,7 @@ export default function MockTestExam() {
                       </div>
                     )}
 
-                    {q.type === "written" && (
+                    {(q.type === "written" || q.type === "cq") && (
                       <div className="exam-written-upload-section">
                         <p className="exam-written-upload-title">
                           {language === "en"
@@ -2159,10 +2219,14 @@ export default function MockTestExam() {
 
                         {!isSubmitted && (
                           <div className="exam-written-upload-controls">
-                            <label className="exam-written-upload-label">
+                            <label
+                              className="exam-written-upload-label"
+                              onClick={markAnswerFileUploadStarted}
+                            >
                               <input
                                 type="file"
                                 accept="image/*"
+                                onClick={markAnswerFileUploadStarted}
                                 onChange={(e) =>
                                   handleWrittenFileChange(e, questionKey)
                                 }
@@ -2326,14 +2390,20 @@ export default function MockTestExam() {
 
                     {config?.contestId && !isReviewMode && (
                       <div className="exam-contest-actions">
-                        <button
-                          type="button"
-                          className="btn-contest-submit"
-                          onClick={() => handleContestQuestionSubmit(actualIndex)}
-                          disabled={answers[questionKey] === undefined}
-                        >
-                          {language === "en" ? "Submit" : "সাবমিট"}
-                        </button>
+                        {(() => {
+                          const isWrittenOrCq = q.type === "written" || q.type === "cq";
+                          const isAnswered = answers[questionKey] !== undefined || (isWrittenOrCq && !!writtenAnswers[questionKey]);
+                          return (
+                            <button
+                              type="button"
+                              className="btn-contest-submit"
+                              onClick={() => handleContestQuestionSubmit(actualIndex)}
+                              disabled={!isAnswered}
+                            >
+                              {language === "en" ? "Submit" : "সাবমিট"}
+                            </button>
+                          );
+                        })()}
                         <button
                           type="button"
                           className="btn-contest-next"
@@ -2514,7 +2584,7 @@ export default function MockTestExam() {
                 <strong>★ {formatDisplayNumber(resultStats.score)}</strong>
               </div>
               <div className="exam-report-card exam-report-card--marks">
-                {questions.some((q) => q.type === "written") ? (
+                {questions.some((q) => q.type === "written" || q.type === "cq") ? (
                   <>
                     <span>
                       {language === "en" ? "Written Answers" : "লিখিত উত্তর"}
