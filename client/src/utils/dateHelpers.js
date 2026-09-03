@@ -1,4 +1,9 @@
-/** Return YYYY-MM-DD string for `date`. Uses UTC to avoid timezone drift. */
+/**
+ * Return YYYY-MM-DD string for `date`. Uses UTC to avoid timezone drift.
+ * 
+ * @param {Date|string} date - Date object or ISO string.
+ * @returns {string|null} YYYY-MM-DD formatted date string, or null if invalid.
+ */
 export function toISODate(date) {
   if (!date) return null;
   if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(date)) {
@@ -12,30 +17,54 @@ export function toISODate(date) {
   return `${y}-${m}-${dd}`;
 }
 
-
+/**
+ * Get today's calendar date key in YYYY-MM-DD format.
+ * 
+ * @returns {string} Today's UTC date key.
+ */
 export function todayKey() {
   return toISODate(new Date());
 }
 
-
+/**
+ * Check if a given date key equals today.
+ * 
+ * @param {string} dayKey - YYYY-MM-DD formatted date key.
+ * @returns {boolean} True if matching today's key.
+ */
 export function isToday(dayKey) {
   if (!dayKey) return false;
   return dayKey === todayKey();
 }
 
-
+/**
+ * Check if a given date key is before today (in the past).
+ * 
+ * @param {string} dayKey - YYYY-MM-DD formatted date key.
+ * @returns {boolean} True if in the past.
+ */
 export function isPast(dayKey) {
   if (!dayKey) return false;
   return dayKey < todayKey();
 }
 
-
+/**
+ * Check if a given date key is after today (in the future).
+ * 
+ * @param {string} dayKey - YYYY-MM-DD formatted date key.
+ * @returns {boolean} True if in the future.
+ */
 export function isFuture(dayKey) {
   if (!dayKey) return false;
   return dayKey > todayKey();
 }
 
-
+/**
+ * Format a Date object into a full readable date string (e.g., "Monday, August 16").
+ * 
+ * @param {Date|string} date - Date to format.
+ * @returns {string} Formatted day string.
+ */
 export function formatDayLong(date) {
   if (!date) return '';
   const d = new Date(date);
@@ -47,7 +76,12 @@ export function formatDayLong(date) {
   });
 }
 
-
+/**
+ * Format a Date object into a short date string (e.g., "Aug 16").
+ * 
+ * @param {Date|string} date - Date to format.
+ * @returns {string} Short formatted string.
+ */
 export function formatDayShort(date) {
   if (!date) return '';
   const d = new Date(date);
@@ -55,7 +89,12 @@ export function formatDayShort(date) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-
+/**
+ * Format a Date object into a 24-hour time string (e.g., "14:30").
+ * 
+ * @param {Date|string} date - Date to format.
+ * @returns {string} HH:MM time string.
+ */
 export function formatTime(date) {
   if (!date) return '';
   const d = new Date(date);
@@ -63,7 +102,13 @@ export function formatTime(date) {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-
+/**
+ * Transform routine days and segments into calendar event objects
+ * suitable for calendar view rendering.
+ * 
+ * @param {Object} routine - StudyRoutine document.
+ * @returns {Array<Object>} Calendar event objects with start/end Date objects and metadata.
+ */
 export function eventsFromRoutine(routine) {
   if (!routine || !Array.isArray(routine.routine)) return [];
   const events = [];
@@ -100,20 +145,37 @@ export function eventsFromRoutine(routine) {
   return events;
 }
 
-
+/**
+ * Locate the routine day object that corresponds to today's date.
+ * 
+ * @param {Object} routine - StudyRoutine document.
+ * @returns {Object|null} Matching day object or null.
+ */
 export function findToday(routine) {
   if (!routine?.routine) return null;
   const key = todayKey();
   return routine.routine.find((d) => d.dayDate && toISODate(d.dayDate) === key) || null;
 }
 
-
+/**
+ * Locate a routine day object by its YYYY-MM-DD date key.
+ * 
+ * @param {Object} routine - StudyRoutine document.
+ * @param {string} dayKey - YYYY-MM-DD date string.
+ * @returns {Object|null} Matching day object or null.
+ */
 export function findDayByKey(routine, dayKey) {
   if (!routine?.routine || !dayKey) return null;
   return routine.routine.find((d) => d.dayDate && toISODate(d.dayDate) === dayKey) || null;
 }
 
-/** Show "Generate Next Week" when generatedUpTo is before the plan end */
+/**
+ * Determine whether more weeks can be generated for the routine.
+ * Checks if `generatedUpTo` is strictly before the routine's overall `planEnd` date.
+ * 
+ * @param {Object} routine - StudyRoutine document.
+ * @returns {boolean} True if another week can be generated.
+ */
 export function hasMoreWeeksToGenerate(routine) {
   if (!routine?.startDate || !routine?.durationDays) return false;
   if (!routine.generatedUpTo) return false;

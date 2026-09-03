@@ -67,7 +67,6 @@ const postSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 // --- Indexes ---
 // All feed queries filter out hidden posts first (isHidden: 1),
 // then sort by a secondary dimension (date, score, comments).

@@ -183,7 +183,12 @@ const slideVariants = {
 };
 
 /**
- * Generate a deterministic pleasant HSL color from a subject string.
+ * Generate a deterministic, aesthetically pleasing HSL color scheme for a subject badge.
+ * Uses a string hashing algorithm on the subject name to guarantee the same subject
+ * always receives the identical hue across all views and cards.
+ * 
+ * @param {string} [subjectName=''] - Name of the subject (e.g., 'Physics', 'Higher Math').
+ * @returns {{ bg: string, border: string, text: string, accent: string }} HSL color styles.
  */
 function getSubjectColor(subjectName = '') {
   let hash = 0;
@@ -200,7 +205,12 @@ function getSubjectColor(subjectName = '') {
 }
 
 /**
- * Format elapsed seconds into HH:MM:SS
+ * Format elapsed seconds into a standard digital timer string:
+ * - HH:MM:SS (if elapsed time is 1 hour or more)
+ * - MM:SS (if under 1 hour)
+ * 
+ * @param {number} [seconds=0] - Number of seconds elapsed in active study session.
+ * @returns {string} Zero-padded formatted time display.
  */
 function formatTimerDisplay(seconds = 0) {
   const h = Math.floor(seconds / 3600);
@@ -303,8 +313,15 @@ export default function StudyRoutinePage() {
   const [editSegmentModal, setEditSegmentModal] = useState(null);
 
   // --------------------------------------------------------------------------
-  // Data Fetching
+  // Data Fetching Functions
   // --------------------------------------------------------------------------
+
+  /**
+   * loadRoutineData
+   * Fetches the user's StudyRoutine document and any running focus session from the server.
+   * If a session is currently running, restores elapsed seconds so the live timer resumes seamlessly.
+   * If an existing profile is found, pre-populates the 28-field form state.
+   */
   const loadRoutineData = useCallback(async () => {
     try {
       setLoading(true);
@@ -336,6 +353,11 @@ export default function StudyRoutinePage() {
     }
   }, []);
 
+  /**
+   * loadStats
+   * Fetches aggregate study metrics (planned/completed hours, streaks, subject distribution)
+   * to keep the dashboard progress bars and statistics cards accurate.
+   */
   const loadStats = useCallback(async () => {
     try {
       const stats = await studyRoutineApi.getStats();
@@ -345,6 +367,7 @@ export default function StudyRoutinePage() {
     }
   }, []);
 
+  // Check auth token and fetch initial routine and stats data on component mount
   useEffect(() => {
     const token = localStorage.getItem('topkorbo_token');
     if (!token) {
@@ -355,7 +378,11 @@ export default function StudyRoutinePage() {
     loadStats();
   }, [loadRoutineData, loadStats, navigate]);
 
-  // Focus Timer Tick Effect (Local ticking, pauses without saving)
+  /**
+   * Focus Timer Tick Effect
+   * Runs a 1-second interval ticker when an active focus session exists and is not paused.
+   * Increments `timerSeconds` locally without needing continuous server pings.
+   */
   useEffect(() => {
     if (activeSession && !isTimerPaused) {
       timerIntervalRef.current = setInterval(() => {
@@ -370,12 +397,26 @@ export default function StudyRoutinePage() {
   }, [activeSession, isTimerPaused]);
 
   // --------------------------------------------------------------------------
-  // Sliding Wizard Handlers & Exam Date Countdown (from Today)
+  // Sliding Wizard Handlers & Exam Date Countdown
   // --------------------------------------------------------------------------
+
+  /**
+   * calculatedExamDays
+   * Memoized computation of calendar days remaining until the target exam date.
+   * Returns a positive integer, or null if no valid exam date has been selected.
+   */
   const calculatedExamDays = useMemo(() => {
     return calculateDaysUntilExam(formData.examDate);
   }, [formData.examDate]);
 
+  /**
+   * handleExamDateChange
+   * Triggered when the student selects or alters their target exam date in Step 2.
+   * Automatically updates the overall plan duration (e.g., "45 days") to match the
+   * remaining days until the exam, and clears any validation errors.
+   * 
+   * @param {string} dateVal - YYYY-MM-DD date string.
+   */
   const handleExamDateChange = (dateVal) => {
     const days = calculateDaysUntilExam(dateVal);
     let updatedDuration = formData.planDuration;
@@ -394,6 +435,12 @@ export default function StudyRoutinePage() {
     }
   };
 
+  /**
+   * handleStartDateChange
+   * Updates the preferred starting date for the study routine schedule.
+   * 
+   * @param {string} startDateVal - YYYY-MM-DD date string.
+   */
   const handleStartDateChange = (startDateVal) => {
     setFormData((prev) => ({
       ...prev,
@@ -401,6 +448,14 @@ export default function StudyRoutinePage() {
     }));
   };
 
+  /**
+   * validateStep
+   * Validates form inputs for a specific wizard step before permitting navigation to the next card.
+   * Checks mandatory academic info, future exam dates, selected subjects, and wake/sleep times.
+   * 
+   * @param {number} step - Wizard step number (1 to 6).
+   * @returns {boolean} True if the step's inputs are valid, false if errors exist.
+   */
   const validateStep = (step) => {
     const errors = {};
     if (step === 1) {
@@ -429,6 +484,11 @@ export default function StudyRoutinePage() {
     return Object.keys(errors).length === 0;
   };
 
+  /**
+   * handleNextStep
+   * Advances the wizard to the subsequent step (card slides right to left).
+   * Blocks transition if required inputs in the current step fail validation.
+   */
   const handleNextStep = () => {
     if (!validateStep(currentStep)) {
       toast.error('Please complete all required fields in this step');
@@ -438,11 +498,22 @@ export default function StudyRoutinePage() {
     setCurrentStep((prev) => Math.min(6, prev + 1));
   };
 
+  /**
+   * handlePrevStep
+   * Reverts the wizard to the previous step (card slides left to right).
+   */
   const handlePrevStep = () => {
     setSlideDirection(-1);
     setCurrentStep((prev) => Math.max(1, prev - 1));
   };
 
+  /**
+   * handleJumpToStep
+   * Direct jump to a specific wizard step via top progress step indicators.
+   * Backward jumps are always permitted; forward jumps require validating the current step.
+   * 
+   * @param {number} targetStep - Step number to navigate to (1-6).
+   */
   const handleJumpToStep = (targetStep) => {
     if (targetStep < currentStep || validateStep(currentStep)) {
       setSlideDirection(targetStep > currentStep ? 1 : -1);
@@ -450,6 +521,13 @@ export default function StudyRoutinePage() {
     }
   };
 
+  /**
+   * handleStreamChange
+   * Triggered when the student selects a stream (Science, Business Studies, Humanities).
+   * Automatically populates the default subjects and weak areas for that stream.
+   * 
+   * @param {'Science'|'Business Studies'|'Humanities'} stream - Selected stream.
+   */
   const handleStreamChange = (stream) => {
     const defaultSubs = STREAM_SUBJECTS[stream] || [];
     setFormData((prev) => ({
@@ -460,6 +538,12 @@ export default function StudyRoutinePage() {
     }));
   };
 
+  /**
+   * handleSubjectToggle
+   * Adds or removes a subject from the student's study plan in Step 3.
+   * 
+   * @param {string} subj - Subject name (e.g. 'Physics').
+   */
   const handleSubjectToggle = (subj) => {
     setFormData((prev) => {
       const exists = prev.subjects.includes(subj);
@@ -468,6 +552,13 @@ export default function StudyRoutinePage() {
     });
   };
 
+  /**
+   * handlePaperToggle
+   * Toggles inclusion of 1st Paper vs 2nd Paper for a given subject.
+   * 
+   * @param {string} subj - Subject name.
+   * @param {'1st Paper'|'2nd Paper'} paper - Paper title.
+   */
   const handlePaperToggle = (subj, paper) => {
     setFormData((prev) => {
       const currentPapers = prev.subjectPapers[subj] || [];
@@ -485,6 +576,13 @@ export default function StudyRoutinePage() {
     });
   };
 
+  /**
+   * handleAddChapterTag
+   * Adds a chapter focus tag to a specific subject (from typing or selecting a suggested chapter).
+   * 
+   * @param {string} subj - Subject name.
+   * @param {string} [directValue] - Direct tag value to add (if selected from list).
+   */
   const handleAddChapterTag = (subj, directValue) => {
     const tag = directValue || (newChapterInput[subj] || '').trim();
     if (!tag) return;
@@ -504,6 +602,13 @@ export default function StudyRoutinePage() {
     }
   };
 
+  /**
+   * handleRemoveChapterTag
+   * Removes a chapter tag from a subject's focus list.
+   * 
+   * @param {string} subj - Subject name.
+   * @param {string} tagToRemove - Chapter title string.
+   */
   const handleRemoveChapterTag = (subj, tagToRemove) => {
     setFormData((prev) => {
       const currentList = prev.subjectChapters[subj] || [];
@@ -517,6 +622,10 @@ export default function StudyRoutinePage() {
     });
   };
 
+  /**
+   * handleAddUnavailableBlock
+   * Appends a new default busy time block (e.g. college or coaching) to prevent scheduling conflicts.
+   */
   const handleAddUnavailableBlock = () => {
     setFormData((prev) => ({
       ...prev,
@@ -527,6 +636,12 @@ export default function StudyRoutinePage() {
     }));
   };
 
+  /**
+   * handleRemoveUnavailableBlock
+   * Deletes an unavailable time block by index.
+   * 
+   * @param {number} index - Index of block to delete.
+   */
   const handleRemoveUnavailableBlock = (index) => {
     setFormData((prev) => ({
       ...prev,
@@ -534,6 +649,12 @@ export default function StudyRoutinePage() {
     }));
   };
 
+  /**
+   * handleRestDayToggle
+   * Toggles a day of the week as a designated rest/break day.
+   * 
+   * @param {string} day - Day name (e.g. 'Friday', 'Saturday').
+   */
   const handleRestDayToggle = (day) => {
     setFormData((prev) => {
       const exists = prev.restDays.includes(day);
@@ -542,6 +663,14 @@ export default function StudyRoutinePage() {
     });
   };
 
+  /**
+   * handleGenerateRoutineSubmit
+   * Form submission handler for the 6-step profiling wizard.
+   * Validates all essential fields, dispatches the POST `/api/study-routine` request,
+   * saves the generated routine document, closes the wizard, and refreshes statistics.
+   * 
+   * @param {React.FormEvent} [e] - Form submission event.
+   */
   const handleGenerateRoutineSubmit = async (e) => {
     e?.preventDefault();
     if (!validateStep(1) || !validateStep(2) || !validateStep(3) || !validateStep(4)) {
@@ -568,6 +697,15 @@ export default function StudyRoutinePage() {
   // --------------------------------------------------------------------------
   // Dashboard Action Handlers
   // --------------------------------------------------------------------------
+
+  /**
+   * handleToggleSegment
+   * Toggles completion status (completed: true/false) of a specific routine segment.
+   * Calls PATCH `/api/study-routine/:dayIndex/:segmentId/toggle`, updates state, and recalculates stats.
+   * 
+   * @param {number} dayNum - Day index number.
+   * @param {string} segmentId - ID of the segment being toggled.
+   */
   const handleToggleSegment = async (dayNum, segmentId) => {
     try {
       const res = await studyRoutineApi.toggleSegment(dayNum, segmentId);
@@ -580,6 +718,15 @@ export default function StudyRoutinePage() {
     }
   };
 
+  /**
+   * handleStartFocusTimer
+   * Initiates a live focus timer study session for a chosen routine segment.
+   * Calls POST `/api/study-routine/session/start`, resets the local seconds counter to 0,
+   * and renders the ticking live session bar across the top of the page.
+   * 
+   * @param {number} dayIndex - Index of current routine day.
+   * @param {Object} segment - Routine segment being studied.
+   */
   const handleStartFocusTimer = async (dayIndex, segment) => {
     try {
       const session = await studyRoutineApi.startSession({
@@ -597,6 +744,14 @@ export default function StudyRoutinePage() {
     }
   };
 
+  /**
+   * handleStopFocusTimer
+   * Halts the active study focus session and commits elapsed minutes to the database.
+   * Calls POST `/api/study-routine/session/stop`, optionally marks the underlying
+   * routine segment as complete, and reloads user statistics.
+   * 
+   * @param {boolean} [markCompleted=true] - Whether to mark the segment completed.
+   */
   const handleStopFocusTimer = async (markCompleted = true) => {
     try {
       const res = await studyRoutineApi.stopSession({
@@ -616,6 +771,11 @@ export default function StudyRoutinePage() {
     }
   };
 
+  /**
+   * handleDeleteRoutine
+   * Prompts the student with a confirmation dialog and deletes their entire study routine.
+   * Calls DELETE `/api/study-routine`, cancels active sessions, and resets the UI to Step 1.
+   */
   const handleDeleteRoutine = async () => {
     if (!window.confirm('Are you sure you want to delete your study routine? This cannot be undone.')) {
       return;
@@ -631,6 +791,14 @@ export default function StudyRoutinePage() {
     }
   };
 
+  /**
+   * handleSaveEditSegment
+   * Submits the segment edit modal dialog.
+   * Calls PUT `/api/study-routine/:dayIndex/:segmentId` to persist updated subject, chapter,
+   * task, or timing adjustments, then closes the modal.
+   * 
+   * @param {React.FormEvent} e - Form submission event.
+   */
   const handleSaveEditSegment = async (e) => {
     e.preventDefault();
     if (!editSegmentModal) return;
@@ -647,6 +815,12 @@ export default function StudyRoutinePage() {
     }
   };
 
+  /**
+   * handleGenerateNextWeek
+   * Requests the AI to generate the next 7 days (Days 8-14) of the adaptive routine.
+   * Analyzes subject completion rates from past days to adjust difficulty,
+   * calls POST `/api/study-routine/ai/generate-week`, and appends new days.
+   */
   const handleGenerateNextWeek = async () => {
     const confirmGen = window.confirm(
       'Generate the next 7 days based on your completion performance and progress?'
@@ -669,6 +843,15 @@ export default function StudyRoutinePage() {
   // --------------------------------------------------------------------------
   // AI Chat Assistant Handlers
   // --------------------------------------------------------------------------
+
+  /**
+   * handleSendAiMessage
+   * Sends natural language instructions to the AI Study Coach (e.g., "Make tomorrow lighter").
+   * Dispatches POST `/api/study-routine/ai/modify`, displays AI responses in the chat drawer,
+   * and updates the live routine schedule seamlessly without page reloads.
+   * 
+   * @param {string} [textToSend] - Optional direct prompt (used by suggested chip buttons).
+   */
   const handleSendAiMessage = async (textToSend) => {
     const query = textToSend || aiInputText;
     if (!query.trim()) return;
@@ -707,7 +890,7 @@ export default function StudyRoutinePage() {
   };
 
   // --------------------------------------------------------------------------
-  // Calculated Dashboard Stats
+  // Calculated Dashboard Stats (Memoized)
   // --------------------------------------------------------------------------
   const currentDaysList = useMemo(() => routineDoc?.routine || [], [routineDoc]);
 

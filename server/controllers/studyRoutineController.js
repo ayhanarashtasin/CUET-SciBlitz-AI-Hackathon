@@ -6,7 +6,11 @@ const Groq = require('groq-sdk');
 const GROQ_MODEL = process.env.LLM_MODEL || process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
 /**
- * Instantiate Groq client using available environment variables.
+ * Instantiate the Groq Cloud SDK client using environment variables.
+ * Fallback to LLM_API_KEY or GROQ_API_KEY.
+ * 
+ * @throws {Error} If neither GROQ_API_KEY nor LLM_API_KEY is configured in .env.
+ * @returns {Groq} Initialized Groq SDK client instance.
  */
 function getGroqClient() {
   const apiKey = process.env.LLM_API_KEY || process.env.GROQ_API_KEY;
@@ -17,7 +21,14 @@ function getGroqClient() {
 }
 
 /**
- * Sanitize text inputs: strip control characters, limit length.
+ * Sanitize untrusted text inputs:
+ * 1. Converts input to string safely.
+ * 2. Strips ASCII and Unicode control characters (protects against log forging/injection).
+ * 3. Trims whitespace and caps maximum string length.
+ * 
+ * @param {*} val - Raw text value to sanitize.
+ * @param {number} [maxLength=500] - Maximum allowed character length.
+ * @returns {string} Sanitized string.
  */
 function sanitizeText(val, maxLength = 500) {
   if (val === undefined || val === null) return '';
@@ -26,7 +37,12 @@ function sanitizeText(val, maxLength = 500) {
 }
 
 /**
- * Sanitize the whole student profile object.
+ * Sanitize the whole student profile object received from the frontend wizard.
+ * Validates and normalizes all 28 profiling fields (academic level, subjects,
+ * weak areas, wake/sleep schedules, unavailable blocks, rest days, and study preferences).
+ * 
+ * @param {Object} profile - Raw student profile submitted by user.
+ * @returns {Object} Deeply sanitized student profile safe for database storage and prompt injection.
  */
 function sanitizeProfile(profile = {}) {
   if (!profile || typeof profile !== 'object') return {};
@@ -87,7 +103,13 @@ function sanitizeProfile(profile = {}) {
 }
 
 /**
- * Call Groq with exponential backoff retry logic.
+ * Execute an LLM API call with automated exponential backoff retry logic.
+ * Handles transient network glitches, 429 rate limit spikes, and 5xx server errors.
+ * 
+ * @param {Function} groqCallFn - Async function executing the Groq API call.
+ * @param {number} [maxAttempts=4] - Maximum number of retry attempts before giving up.
+ * @returns {Promise<*>} Result of the successful Groq API call.
+ * @throws {Error} Throws the final error if all retry attempts fail.
  */
 async function callGroqWithRetry(groqCallFn, maxAttempts = 4) {
   let lastError;
@@ -104,6 +126,7 @@ async function callGroqWithRetry(groqCallFn, maxAttempts = 4) {
         throw err;
       }
 
+      // Exponential backoff: 1s, 2s, 4s (+ jitter up to 400ms)
       const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 6000) + Math.floor(Math.random() * 400);
       await new Promise((resolve) => setTimeout(resolve, backoffMs));
     }
@@ -112,7 +135,14 @@ async function callGroqWithRetry(groqCallFn, maxAttempts = 4) {
 }
 
 /**
- * Safely parse JSON from raw LLM output, extracting JSON object or array.
+ * Robustly extract and parse JSON from raw LLM output.
+ * Handles:
+ * - Removal of DeepSeek-style `<think>...</think>` internal reasoning tags.
+ * - Stripping of markdown code fences (```json ... ```).
+ * - Extraction of embedded `{ ... }` objects or `[ ... ]` arrays.
+ * 
+ * @param {string} raw - Raw text output from Groq LLM.
+ * @returns {Object|Array|null} Parsed JSON object/array, or null if parsing fails.
  */
 function safeParseJson(raw) {
   if (!raw) return null;
@@ -120,6 +150,7 @@ function safeParseJson(raw) {
   text = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim();
   text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
 
+  // Try extracting top-level object
   const firstBrace = text.indexOf('{');
   const lastBrace = text.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
@@ -128,6 +159,7 @@ function safeParseJson(raw) {
     } catch (_) {}
   }
 
+  // Try extracting top-level array
   const firstBracket = text.indexOf('[');
   const lastBracket = text.lastIndexOf(']');
   if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
@@ -144,7 +176,18 @@ function safeParseJson(raw) {
 }
 
 /**
- * Generates a high-quality fallback baseline 7-day routine in case of LLM outage.
+ * Deterministic Fallback Routine Generator.
+ * 
+ * Invoked if the Groq LLM times out or encounters an outage.
+ * Synthesizes a high-quality, pedagogically balanced 7-day routine based on:
+ * - The student's selected subjects and weak areas (assigns 'high' priority and extra slots).
+ * - Designated rest days (flags `isRest: true` and empty segments).
+ * - Target daily study hours (distributes 2, 3, or 4 study slots per active day).
+ * 
+ * @param {Object} profile - Sanitized student profile.
+ * @param {Date} startDate - Routine start calendar date.
+ * @param {number} [startDayNumber=1] - Starting day index (e.g. 1 for first week, 8 for second week).
+ * @returns {Array<Object>} 7 routine day objects with populated study segments.
  */
 function generateFallbackRoutine(profile, startDate, startDayNumber = 1) {
   const routine = [];
@@ -177,6 +220,7 @@ function generateFallbackRoutine(profile, startDate, startDayNumber = 1) {
         { time: '08:00 PM - 10:00 PM', startH: 20, startM: 0, endH: 22, endM: 0, dur: 120 }
       ];
 
+      // Determine session count based on student's requested daily study hours
       const numSessions = profile.dailyStudyHours && profile.dailyStudyHours.startsWith('3-4')
         ? 2
         : profile.dailyStudyHours && profile.dailyStudyHours.startsWith('9-10')
@@ -224,7 +268,14 @@ function generateFallbackRoutine(profile, startDate, startDayNumber = 1) {
 }
 
 /**
- * Normalizes raw routine from LLM to ensure schema compliance.
+ * Normalizes and validates raw routine day objects returned from the LLM.
+ * Guarantees that every day, segment, date, priority, and duration conforms strictly
+ * to the Mongoose StudyRoutine schema requirements.
+ * 
+ * @param {Array} rawDays - Raw parsed days array from LLM response.
+ * @param {Date} startDate - Base start date for calculation.
+ * @param {number} [startDayNumber=1] - Offset for day numbering.
+ * @returns {Array<Object>|null} Validated array of routine day objects, or null if input is invalid.
  */
 function normalizeRoutine(rawDays, startDate, startDayNumber = 1) {
   if (!Array.isArray(rawDays) || rawDays.length === 0) return null;
@@ -277,6 +328,13 @@ function normalizeRoutine(rawDays, startDate, startDayNumber = 1) {
 
 /**
  * Build system prompt and user prompt for generating a realistic 7-day routine.
+ * Embeds Bangladeshi academic curriculum guidelines, wake/sleep boundaries,
+ * rest days, unavailable coaching blocks, and weak-area priority rules.
+ * 
+ * @param {Object} profile - Sanitized student profile.
+ * @param {Date} startDate - Starting calendar date.
+ * @param {number} [startDayNumber=1] - Day index offset.
+ * @returns {{ systemInstruction: string, userPrompt: string }} Prompt payload for Groq chat completion.
  */
 function buildGenerationPrompt(profile, startDate, startDayNumber = 1) {
   const systemInstruction = `You are TopKorbo's expert AI Academic Planner and Study Routine Architect for Bangladeshi students (HSC, Admission, Board Exams).
@@ -345,7 +403,17 @@ Please construct the 7-day study routine JSON starting on ${startDate.toISOStrin
 
 /**
  * GET /api/study-routine
- * Retrieve the caller's active StudyRoutine and any currently running focus session.
+ * 
+ * Retrieve the caller's active StudyRoutine document and any currently running focus timer session.
+ * 
+ * Workflow:
+ * 1. Queries MongoDB `StudyRoutine` collection by `req.user.id`.
+ * 2. Queries `StudySession` collection for any session with `status: 'active'`.
+ * 3. Returns both items wrapped in `ApiResponse.success`. If none found, returns nulls.
+ * 
+ * @param {import('express').Request} req - Express request with `req.user.id`.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function getRoutine(req, res, next) {
   try {
@@ -363,7 +431,21 @@ async function getRoutine(req, res, next) {
 
 /**
  * POST /api/study-routine
- * Save student profile and generate the first 7-day study routine via Groq LLM.
+ * 
+ * Save the student's 28-field profiling preferences and generate their first 7-day study routine.
+ * 
+ * Workflow:
+ * 1. Validates and sanitizes incoming student profile data.
+ * 2. Calculates start date and overall plan duration.
+ * 3. Calls Groq LLM API with exponential backoff to generate structured 7-day study slots.
+ * 4. Normalizes and validates the LLM JSON against schema standards.
+ * 5. Falls back to a deterministic generator if the LLM fails or times out.
+ * 6. Upserts the `StudyRoutine` document in MongoDB for this user.
+ * 7. Returns the saved routine with status 201 Created.
+ * 
+ * @param {import('express').Request} req - Express request with `req.body.studentProfile`.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function saveRoutine(req, res, next) {
   try {
@@ -454,7 +536,17 @@ async function saveRoutine(req, res, next) {
 
 /**
  * PUT /api/study-routine
- * Replace the routine array or full routine document.
+ * 
+ * Replace or bulk-update the routine array, student profile, or exam target metadata.
+ * 
+ * Workflow:
+ * 1. Checks that an existing routine exists for the user.
+ * 2. Overwrites `routine`, `studentProfile`, or `examInfo` if provided.
+ * 3. Saves document and returns the updated entity.
+ * 
+ * @param {import('express').Request} req - Express request with `{ routine, studentProfile, examInfo }`.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function replaceRoutine(req, res, next) {
   try {
@@ -484,7 +576,17 @@ async function replaceRoutine(req, res, next) {
 
 /**
  * DELETE /api/study-routine
- * Delete the caller's StudyRoutine document and abandon running sessions.
+ * 
+ * Delete the caller's StudyRoutine document and abandon any running focus sessions.
+ * 
+ * Workflow:
+ * 1. Finds and removes the `StudyRoutine` document belonging to `req.user.id`.
+ * 2. Finds any active `StudySession` documents for this user and sets `status = 'abandoned'`.
+ * 3. Returns a 200 OK success message.
+ * 
+ * @param {import('express').Request} req - Express request.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function deleteRoutine(req, res, next) {
   try {
@@ -502,7 +604,19 @@ async function deleteRoutine(req, res, next) {
 
 /**
  * PATCH /api/study-routine/:dayIndex/:segmentId/toggle
- * Toggle completion of a routine segment.
+ * 
+ * Toggle the completion status (completed: true/false) of a specific routine segment.
+ * 
+ * Workflow:
+ * 1. Finds the user's StudyRoutine.
+ * 2. Matches the day by day number or index.
+ * 3. Matches the sub-document segment by ID.
+ * 4. Toggles `segment.completed` and records `completedAt` timestamp.
+ * 5. Saves the document and returns the updated routine, day, and segment.
+ * 
+ * @param {import('express').Request} req - Express request with `params.dayIndex` and `params.segmentId`.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function toggleSegment(req, res, next) {
   try {
@@ -548,7 +662,17 @@ async function toggleSegment(req, res, next) {
 
 /**
  * PUT /api/study-routine/:dayIndex/:segmentId
- * Edit fields of a specific routine segment.
+ * 
+ * Edit fields of a specific routine segment (e.g. subject, chapter, task, time, priority).
+ * 
+ * Workflow:
+ * 1. Finds the user's StudyRoutine, day, and segment.
+ * 2. Sanitizes and updates all modified fields.
+ * 3. Persists changes to MongoDB and returns the updated state.
+ * 
+ * @param {import('express').Request} req - Express request with update fields in `req.body`.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function editSegment(req, res, next) {
   try {
@@ -605,7 +729,23 @@ async function editSegment(req, res, next) {
 
 /**
  * GET /api/study-routine/stats
- * Aggregate study statistics: hours, subject distribution, streaks, and completion rates.
+ * 
+ * Aggregate comprehensive study statistics: planned hours, completed hours,
+ * study streaks, subject distributions, and daily completion history.
+ * 
+ * Workflow:
+ * 1. Loads user's routine and the 20 most recent completed study sessions.
+ * 2. Iterates over all days and segments to aggregate:
+ *    - totalSegments, completedSegments, and overall completionPercentage.
+ *    - totalPlannedMinutes and totalCompletedMinutes.
+ *    - Per-subject breakdown (planned vs completed hours, completionRate).
+ *    - Daily completion metrics for charts and heatmaps.
+ * 3. Calculates the current consecutive day streak (rest days preserve the streak).
+ * 4. Returns the computed statistics payload.
+ * 
+ * @param {import('express').Request} req - Express request.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function getStats(req, res, next) {
   try {
@@ -738,7 +878,17 @@ async function getStats(req, res, next) {
 
 /**
  * POST /api/study-routine/session/start
- * Start a live focus timer session. Abandons any previous active session.
+ * 
+ * Start a live focus timer session (Pomodoro or manual study tracking).
+ * 
+ * Workflow:
+ * 1. Marks any currently active session for this user as 'abandoned' with an endedAt timestamp.
+ * 2. Creates a new StudySession with `status = 'active'` and current start timestamp.
+ * 3. Saves to MongoDB and returns the active session document to the frontend.
+ * 
+ * @param {import('express').Request} req - Express request containing session details.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function startSession(req, res, next) {
   try {
@@ -792,7 +942,19 @@ async function startSession(req, res, next) {
 
 /**
  * POST /api/study-routine/session/stop
- * Stop the active focus timer session, compute duration, mark completed.
+ * 
+ * Stop and finalize the active focus timer session.
+ * 
+ * Workflow:
+ * 1. Finds the user's active session in MongoDB.
+ * 2. Computes the elapsed duration: `durationMinutes = (endedAt - startedAt) / 60000`.
+ * 3. Updates session status to 'completed' and saves.
+ * 4. If `markCompleted: true`, finds the associated routine segment and marks `completed = true`.
+ * 5. Returns the completed session and updated routine.
+ * 
+ * @param {import('express').Request} req - Express request with `{ segmentId?, markCompleted?: boolean }`.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function stopSession(req, res, next) {
   try {
@@ -844,7 +1006,12 @@ async function stopSession(req, res, next) {
 
 /**
  * POST /api/study-routine/ai/chat
- * Generate a 7-day routine based on provided student profile.
+ * 
+ * Test or preview 7-day routine generation directly without saving to the database.
+ * 
+ * @param {import('express').Request} req - Express request containing `studentProfile`.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function aiChat(req, res, next) {
   try {
@@ -886,7 +1053,19 @@ async function aiChat(req, res, next) {
 
 /**
  * POST /api/study-routine/ai/modify
- * Modify routine based on natural language student instructions.
+ * 
+ * Modify an existing routine based on natural language student instructions.
+ * 
+ * Workflow:
+ * 1. Sanitizes user modification message (e.g. "Swap Physics and Higher Math on Tuesday").
+ * 2. Fetches user's current routine from MongoDB.
+ * 3. Sends prompt to Groq LLM with strict instructions to preserve already-completed segments.
+ * 4. Normalizes the adapted routine and saves it back to MongoDB.
+ * 5. Returns a friendly AI response explanation and the modified routine schedule.
+ * 
+ * @param {import('express').Request} req - Express request with `{ message, currentRoutine? }`.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function aiModify(req, res, next) {
   try {
@@ -993,7 +1172,19 @@ Student Request:
 
 /**
  * POST /api/study-routine/ai/generate-week
- * Generate the next 7 days adaptively based on past completion rates and subject mastery.
+ * 
+ * Generate the NEXT 7 days adaptively based on past completion rates and subject mastery.
+ * 
+ * Workflow:
+ * 1. Evaluates past performance per subject (e.g. Higher Math: 30% completion, Physics: 85% completion).
+ * 2. If a subject has <50% completion, prompts the AI to schedule extra revision and problem sets.
+ * 3. If a subject has >80% completion, advances the curriculum to subsequent chapters.
+ * 4. Appends the new 7 days (Days 8 to 14) to the existing `routine` array in MongoDB.
+ * 5. Updates `generatedUpTo` and returns the extended routine document.
+ * 
+ * @param {import('express').Request} req - Express request.
+ * @param {import('express').Response} res - Express response.
+ * @param {import('express').NextFunction} next - Error forwarding handler.
  */
 async function aiGenerateWeek(req, res, next) {
   try {
