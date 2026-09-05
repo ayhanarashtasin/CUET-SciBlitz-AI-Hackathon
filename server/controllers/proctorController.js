@@ -33,8 +33,7 @@ exports.logViolation = async (req, res, next) => {
         snapshotUrl = uploadResponse.secure_url;
       } catch (uploadError) {
         console.error('Cloudinary upload error:', uploadError);
-        // Fallback to storing first 500 chars if upload fails
-        snapshotUrl = image.substring(0, 500); 
+        // Keep the complete data URL already in snapshotUrl so evidence remains readable.
       }
     } else if (image.startsWith('data:image')) {
        // If no cloudinary, truncate the base64 or keep it
@@ -482,4 +481,3 @@ exports.deleteViolation = async (req, res, next) => {
     next(error);
   }
 };
-

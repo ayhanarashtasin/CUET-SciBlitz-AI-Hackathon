@@ -20,6 +20,7 @@ import Sidebar from '../components/layout/Sidebar';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { getGlobalLeaderboard } from '../services/contestApi';
+import { preloadYoloProctorModel } from '../hooks/useYoloProctor';
 import './Contests.css';
 
 // ─── Shared timezone offsets ─────────────────────────────────────────────────
@@ -472,6 +473,7 @@ export default function Contests() {
         return;
       }
     }
+    if (!isPractice) preloadYoloProctorModel().catch(() => {});
     try {
       const token = localStorage.getItem('topkorbo_token');
       const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -647,6 +649,8 @@ export default function Contests() {
         return (
           <button
             className="contest-table-cta contest-table-cta--active"
+            onPointerEnter={() => preloadYoloProctorModel().catch(() => {})}
+            onFocus={() => preloadYoloProctorModel().catch(() => {})}
             onClick={() => handleParticipate(contest._id)}
           >
             <span>{language === 'en' ? 'Participate' : 'অংশ নিন'}</span>

@@ -1804,6 +1804,7 @@ export default function MockTestExam() {
     >
       {/* AI Proctor: floating PiP camera for mobile phone detection during live contests */}
       <ProctorPipCamera
+        key={config?.contestId}
         contestId={config?.contestId}
         enabled={isContestActive}
         maxViolations={3}
@@ -1811,8 +1812,8 @@ export default function MockTestExam() {
         onViolation={(violation) => {
           toast.error(
             language === "en"
-              ? `⚠️ Mobile phone detected (${violation.confidence ? Math.round(violation.confidence * 100) + '% confidence' : ''}). A screenshot has been sent to the proctor.`
-              : `⚠️ মোবাইল ফোন শনাক্ত হয়েছে! একটি স্ক্রিনশট প্রক্টরের কাছে পাঠানো হয়েছে।`,
+              ? `⚠️ Mobile phone detected (${violation.confidence ? Math.round(violation.confidence * 100) + '% confidence' : ''}). Please put it away. A screenshot was captured for review.`
+              : `⚠️ মোবাইল ফোন শনাক্ত হয়েছে! ফোনটি সরিয়ে রাখুন। পর্যালোচনার জন্য একটি স্ক্রিনশট নেওয়া হয়েছে।`,
             { duration: 5000, icon: "🚨" }
           );
         }}

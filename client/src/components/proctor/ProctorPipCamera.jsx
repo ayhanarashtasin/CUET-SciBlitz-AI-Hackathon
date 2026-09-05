@@ -12,7 +12,7 @@ import './ProctorPipCamera.css';
  */
 export default function ProctorPipCamera({ contestId, enabled = false, onViolation, onStatusChange, maxViolations = 3 }) {
   const { language } = useLanguage();
-  const { status, phoneDetected, violationCount, videoRef, error, start } = useYoloProctor({
+  const { status, phoneDetected, violationCount, videoRef, error, uploadError, start } = useYoloProctor({
     contestId,
     enabled,
     onViolation,
@@ -23,18 +23,17 @@ export default function ProctorPipCamera({ contestId, enabled = false, onViolati
 
   if (!enabled) return null;
 
-  const isActive = status === 'active' || status === 'camera_ready' || status === 'camera_only';
+  const isActive = status === 'active';
   const isRequesting = status === 'requesting_camera';
   const isError = status === 'error';
 
   const statusText = (() => {
-    if (isError) return language === 'en' ? '⚠️ Camera Error' : '⚠️ ক্যামেরা ত্রুটি';
+    if (isError) return language === 'en' ? '⚠️ Proctor Unavailable' : '⚠️ প্রক্টর চালু নেই';
     if (phoneDetected) return language === 'en' ? '🚨 Phone Detected!' : '🚨 ফোন শনাক্ত!';
     if (status === 'active') return language === 'en' ? '🛡️ AI Proctor Active' : '🛡️ এআই প্রক্টর সক্রিয়';
     if (status === 'camera_ready') return language === 'en' ? '📷 AI Loading...' : '📷 এআই লোড হচ্ছে...';
-    if (status === 'camera_only') return language === 'en' ? '📷 Camera Active' : '📷 ক্যামেরা সক্রিয়';
     if (isRequesting) return language === 'en' ? '⏳ Starting...' : '⏳ শুরু হচ্ছে...';
-    return language === 'en' ? '🛡️ AI Proctor Active' : '🛡️ এআই প্রক্টর সক্রিয়';
+    return language === 'en' ? '⏳ Starting...' : '⏳ শুরু হচ্ছে...';
   })();
 
   return (
@@ -71,7 +70,7 @@ export default function ProctorPipCamera({ contestId, enabled = false, onViolati
       >
         <div className="proctor-pip__header">
           <span className="proctor-pip__status-dot" />
-          <span className="proctor-pip__status-text">{statusText}</span>
+          <span className="proctor-pip__status-text" role="status">{statusText}</span>
           <button
             type="button"
             className="proctor-pip__minimize"
@@ -105,7 +104,7 @@ export default function ProctorPipCamera({ contestId, enabled = false, onViolati
                 onClick={start}
                 tabIndex={minimized ? -1 : undefined}
               >
-                {language === 'en' ? 'Retry Camera' : 'আবার চেষ্টা করুন'}
+                {language === 'en' ? 'Retry Proctor' : 'আবার চেষ্টা করুন'}
               </button>
             </div>
           )}
@@ -126,11 +125,12 @@ export default function ProctorPipCamera({ contestId, enabled = false, onViolati
         {phoneDetected && (
           <div className="proctor-pip__alert-banner">
             {language === 'en'
-              ? 'Mobile phone detected! A screenshot has been captured and sent to the proctor.'
-              : 'মোবাইল ফোন শনাক্ত হয়েছে! একটি স্ক্রিনশট ক্যাপচার করে প্রক্টরের কাছে পাঠানো হয়েছে।'
+              ? 'Mobile phone detected! Please put it away. A screenshot was captured for review.'
+              : 'মোবাইল ফোন শনাক্ত হয়েছে! ফোনটি সরিয়ে রাখুন। পর্যালোচনার জন্য একটি স্ক্রিনশট নেওয়া হয়েছে।'
             }
           </div>
         )}
+        {uploadError && <div className="proctor-pip__alert-banner" role="alert">{uploadError}</div>}
       </div>
     </>
   );

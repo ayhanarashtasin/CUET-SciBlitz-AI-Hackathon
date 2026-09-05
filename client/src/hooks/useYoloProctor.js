@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import httpClient from '../services/httpClient';
 
 const CELL_PHONE_CLASS_ID = 67; // COCO dataset class for 'cell phone'
 const PREFILTER_THRESHOLD = 0.25; // Cheapest gate inside the output scan
@@ -27,6 +28,8 @@ const MODEL_CACHE_NAME = 'topkorbo-proctor-model-v1';
 // double-mount), and expose preloadYoloProctorModel() so callers can start the
 // work before the exam screen even renders.
 let sessionPromise = null;
+// ponytail: one inference at a time; separate sessions if simultaneous cameras are needed.
+let inferencePending = false;
 
 async function fetchModelBytes() {
   // Cache Storage keeps the 12 MB weights on disk so the second contest (and
@@ -57,59 +60,55 @@ async function fetchModelBytes() {
 }
 
 async function createSession() {
-  // Prefer GPU (WebGPU) for real-time inference (~10-30ms/frame). Devices
-  // without WebGPU (older iOS/iPadOS, old browsers) automatically fall back to
-  // CPU (WASM) via the executionProviders chain — the feature still works, just
-  // slower. The /webgpu bundle ships both providers.
-  const gpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
-
+  // Prefer a usable GPU adapter; the same bundle supports CPU/WASM fallback.
   // Download the weights while the runtime bundle is still being imported —
   // the two slowest steps now overlap instead of running back to back.
   const [ort, modelBytes] = await Promise.all([
     import('onnxruntime-web/webgpu'),
     fetchModelBytes()
   ]);
+  const adapter = await navigator.gpu?.requestAdapter().catch(() => null);
+  let gpuAvailable = !!adapter;
+  if (adapter) ort.env.webgpu.adapter = adapter;
 
   // WASM settings only apply when it falls back to CPU. Single thread avoids
   // the SharedArrayBuffer / COOP-COEP requirement on mobile.
   if (ort.env && ort.env.wasm) {
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.simd = true;
+    ort.env.wasm.proxy = !gpuAvailable;
   }
 
   // Building the session runs graph optimization, which is synchronous. Yield
   // first so an in-progress route change / render can finish.
   await yieldToBrowser();
 
-  const session = await ort.InferenceSession.create(new Uint8Array(modelBytes), {
-    executionProviders: gpuAvailable ? ['webgpu', 'wasm'] : ['wasm'],
-    graphOptimizationLevel: 'all'
-  });
-
-  // Warmup: the first inference lazily compiles GPU shaders / WASM kernels
-  // (can take 1-2s, and on the CPU path it blocks the main thread). One
-  // throwaway pass here — before any camera frame is scored — means the FIRST
-  // real phone that appears is detected at full speed instead of being missed
-  // during the cold-start stall.
-  //
-  // The yield matters: this runs while the student is navigating into the
-  // exam, so we let the browser paint the exam screen before spending the
-  // thread on a warmup frame.
-  await yieldToBrowser();
-  try {
-    const inputName = session.inputNames?.[0] || 'images';
-    const warmData = new Float32Array(3 * MODEL_INPUT_SIZE * MODEL_INPUT_SIZE);
-    const warmTensor = new ort.Tensor('float32', warmData, [1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE]);
-    await session.run({ [inputName]: warmTensor });
-  } catch (warmErr) {
-    console.warn('[Proctor] Warmup inference skipped:', warmErr.message);
+  for (const provider of gpuAvailable ? ['webgpu', 'wasm'] : ['wasm']) {
+    let session;
+    let warmTensor;
+    try {
+      session = await ort.InferenceSession.create(new Uint8Array(modelBytes), {
+        executionProviders: [provider],
+        graphOptimizationLevel: 'all'
+      });
+      // Compile kernels before accepting camera frames; a failed warmup is not ready.
+      await yieldToBrowser();
+      const inputName = session.inputNames?.[0] || 'images';
+      warmTensor = new ort.Tensor('float32', new Float32Array(3 * MODEL_INPUT_SIZE * MODEL_INPUT_SIZE), [1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE]);
+      const outputs = await session.run({ [inputName]: warmTensor });
+      Object.values(outputs).forEach(output => output.dispose());
+      console.info(`[Proctor] Detector ready (${gpuAvailable ? 'WebGPU' : 'CPU/WASM'})`);
+      return { ort, session, gpuAvailable, offMainThread: gpuAvailable || ort.env.wasm.proxy };
+    } catch (err) {
+      if (session) await session.release();
+      if (provider === 'wasm') throw err;
+      console.warn('[Proctor] GPU initialization failed; retrying on CPU:', err.message);
+      gpuAvailable = false;
+      // The runtime is initialized; retain its worker setting for the CPU retry.
+    } finally {
+      warmTensor?.dispose();
+    }
   }
-
-  // Which provider actually got used decides everything about how heavy this
-  // feature is on the machine, so make it visible when diagnosing slowness.
-  console.info(`[Proctor] Detector ready (${gpuAvailable ? 'WebGPU' : 'CPU/WASM'})`);
-
-  return { ort, session, gpuAvailable };
 }
 
 // Hand the thread back so the browser can paint / handle input before we start
@@ -175,13 +174,16 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
   const loopGenerationRef = useRef(0);
   const consecutiveDetectionsRef = useRef(0);
   const lastViolationTimeRef = useRef(0);
+  const lastVideoTimeRef = useRef(-1);
+  const contestIdRef = useRef(contestId);
   // Reused input buffer avoids allocating ~1.2M floats per frame (less GC jank).
-  const inputBufferRef = useRef(new Float32Array(3 * MODEL_INPUT_SIZE * MODEL_INPUT_SIZE));
+  const inputBufferRef = useRef(null);
 
-  const [status, setStatus] = useState('idle'); // idle | requesting_camera | camera_ready | active | camera_only | error
+  const [status, setStatus] = useState('idle'); // idle | requesting_camera | camera_ready | active | error
   const [phoneDetected, setPhoneDetected] = useState(false);
   const [violationCount, setViolationCount] = useState(0);
   const [error, setError] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
 
   // Latest callbacks in refs so the detection loop never closes over stale ones
   // and never has to be torn down when a parent re-renders.
@@ -191,15 +193,103 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
   useEffect(() => {
     onViolationRef.current = onViolation;
     onStatusChangeRef.current = onStatusChange;
-  }, [onViolation, onStatusChange]);
+    contestIdRef.current = contestId;
+  }, [onViolation, onStatusChange, contestId]);
 
   useEffect(() => {
     if (onStatusChangeRef.current) onStatusChangeRef.current(status);
   }, [status]);
 
+  // Stop the camera and the detection loop. The compiled model itself is kept
+  // alive at module scope so re-entering a contest is instant.
+  const stop = useCallback(() => {
+    isRunningRef.current = false;
+    // Invalidate any in-flight start() and any awaiting detection tick.
+    runTokenRef.current += 1;
+    loopGenerationRef.current += 1;
+    if (loopTimeoutRef.current) {
+      clearTimeout(loopTimeoutRef.current);
+      loopTimeoutRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    sessionRef.current = null;
+    ortRef.current = null;
+    setStatus('idle');
+    setPhoneDetected(false);
+    consecutiveDetectionsRef.current = 0;
+    lastVideoTimeRef.current = -1;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
+
+  // Capture snapshot and report violation
+  const handleViolation = useCallback((detection, { padX, padY, drawW, drawH, vw, vh }) => {
+    const contestId = contestIdRef.current;
+    const runToken = runTokenRef.current;
+
+    // Capture full-resolution snapshot
+    const captureCanvas = document.createElement('canvas');
+    captureCanvas.width = vw;
+    captureCanvas.height = vh;
+    const captureCtx = captureCanvas.getContext('2d');
+    // Save the frame actually analyzed, not the live camera after inference.
+    captureCtx.drawImage(canvasRef.current, padX, padY, drawW, drawH, 0, 0, vw, vh);
+
+    // Draw red bounding box on the snapshot. videoBbox is already in the
+    // full-resolution video coordinate space (mapped out of the letterbox), so
+    // no extra scaling is needed here.
+    if (detection.videoBbox) {
+      const [bx, by, bw, bh] = detection.videoBbox;
+      captureCtx.strokeStyle = '#ef4444';
+      captureCtx.lineWidth = 3;
+      captureCtx.strokeRect(bx, by, bw, bh);
+      // Label
+      captureCtx.fillStyle = '#ef4444';
+      captureCtx.font = 'bold 14px sans-serif';
+      captureCtx.fillText(
+        `Mobile Phone ${Math.round(detection.confidence * 100)}%`,
+        bx,
+        Math.max(by - 6, 14)
+      );
+    }
+
+    const snapshotBase64 = captureCanvas.toDataURL('image/jpeg', 0.8);
+
+    // Increment client-side violation counter immediately
+    setViolationCount(prev => prev + 1);
+
+    // Report to backend
+    if (contestId) {
+      httpClient.request(`/contests/${contestId}/proctor/violation`, {
+        method: 'POST',
+        showSlowMessage: false,
+        body: JSON.stringify({
+          violationType: 'MOBILE_PHONE_DETECTED',
+          confidence: Math.round(detection.confidence * 100),
+          image: snapshotBase64
+        })
+      }).catch(err => {
+        console.warn('[Proctor] Failed to report violation to server:', err.message);
+        if (isRunningRef.current && runToken === runTokenRef.current) {
+          setUploadError('A detection could not be saved. Check your connection and contact the proctor.');
+        }
+      });
+    }
+
+    if (onViolationRef.current) {
+      onViolationRef.current({
+        type: 'MOBILE_PHONE_DETECTED',
+        confidence: detection.confidence,
+        timestamp: Date.now()
+      });
+    }
+  }, []);
+
   // Lazily create the offscreen work canvas once. Re-assigning canvas.width
   // every frame (the old behaviour) reallocates and clears the backing store.
-  const getContext = () => {
+  const getContext = useCallback(() => {
     if (!ctxRef.current) {
       const canvas = document.createElement('canvas');
       canvas.width = MODEL_INPUT_SIZE;
@@ -208,15 +298,22 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
       ctxRef.current = canvas.getContext('2d', { willReadFrequently: true });
     }
     return ctxRef.current;
-  };
+  }, []);
 
   // Run a single inference frame. Returns when the frame is fully scored so the
   // caller can chain the next one immediately.
-  const runInference = async () => {
+  const runInference = useCallback(async () => {
     const video = videoRef.current;
     const session = sessionRef.current;
     const ort = ortRef.current;
-    if (!video || !session || !ort || video.readyState < 2) return;
+    if (!video || !session || !ort || video.readyState < 2 || inferencePending) return;
+    if (video.currentTime === lastVideoTimeRef.current) return;
+    lastVideoTimeRef.current = video.currentTime;
+    const runToken = runTokenRef.current;
+    const isStale = () => !isRunningRef.current || runToken !== runTokenRef.current;
+    inferencePending = true;
+    let inputTensor;
+    let results;
 
     try {
       const ctx = getContext();
@@ -239,17 +336,21 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
       ctx.drawImage(video, padX, padY, drawW, drawH);
 
       const imageData = ctx.getImageData(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
-      const inputTensor = preprocessImage(ort, imageData.data, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE, inputBufferRef.current);
+      // The WASM proxy transfers (detaches) the input buffer to its worker.
+      if (!inputBufferRef.current?.byteLength) {
+        inputBufferRef.current = new Float32Array(3 * MODEL_INPUT_SIZE * MODEL_INPUT_SIZE);
+      }
+      inputTensor = preprocessImage(ort, imageData.data, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE, inputBufferRef.current);
 
       const inputName = session.inputNames?.[0] || 'images';
-      const results = await session.run({ [inputName]: inputTensor });
+      results = await session.run({ [inputName]: inputTensor });
+      if (isStale()) return;
       const outputKey = session.outputNames?.[0] || Object.keys(results)[0];
       const output = results[outputKey];
 
-      if (!output || !output.data) return;
+      if (!output || !output.data) throw new Error('Detector returned no predictions');
 
-      // Only scan the cell-phone class (67) instead of all 80 COCO classes.
-      // ~80x less main-thread work per frame => faster cycles, less UI jank.
+      // Scan phone scores first; compare classes only for plausible candidates.
       const phoneModel = findBestPhone(output.data, output.dims);
       const phoneDetection = phoneModel && phoneModel.confidence >= CONFIDENCE_THRESHOLD
         ? phoneModel
@@ -280,7 +381,7 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
           const now = Date.now();
           if (now - lastViolationTimeRef.current > DEBOUNCE_MS) {
             lastViolationTimeRef.current = now;
-            handleViolation(phoneDetection);
+            handleViolation(phoneDetection, { padX, padY, drawW, drawH, vw, vh });
           }
         }
       } else {
@@ -288,9 +389,19 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
         setPhoneDetected(false);
       }
     } catch (err) {
+      if (isStale()) return;
       console.warn('[Proctor] Inference error:', err.message);
+      stop();
+      setError('Phone detection stopped. Please retry the proctor.');
+      setStatus('error');
+      sessionPromise = null;
+      await session.release().catch(() => {});
+    } finally {
+      inputTensor?.dispose();
+      if (results) Object.values(results).forEach(output => output.dispose());
+      inferencePending = false;
     }
-  };
+  }, [getContext, handleViolation, stop]);
 
   // Self-scheduling detection loop. Each pass waits for the previous inference
   // to finish before queuing the next, so runs can never overlap and thrash the
@@ -301,7 +412,7 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
   // start/stop bumps the generation, and a tick whose generation is stale exits
   // instead of rescheduling. Without this, React StrictMode's mount → unmount →
   // mount leaves two loops running forever and the tab locks up.
-  const startDetectionLoop = (cycleMs) => {
+  const startDetectionLoop = useCallback((cycleMs, offMainThread) => {
     const generation = ++loopGenerationRef.current;
     if (loopTimeoutRef.current) {
       clearTimeout(loopTimeoutRef.current);
@@ -317,19 +428,14 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
       if (isStale()) return;
 
       const elapsed = performance.now() - startedAt;
-      // Three-way floor:
-      //   MIN_IDLE_MS   — always give the browser some slack.
-      //   cycleMs-elapsed — keep the intended cadence on fast hardware.
-      //   elapsed       — cap the loop at a 50% duty cycle, so however slow a
-      //                   frame is, the UI gets an equal share of the thread.
-      // The last term is the one that prevents the "Page unresponsive" dialog
-      // on CPU-only (WASM) devices, where a frame can take several hundred ms.
-      const wait = Math.max(MIN_IDLE_MS, cycleMs - elapsed, elapsed);
+      // GPU / worker inference yields naturally; only main-thread CPU needs
+      // the extra duty-cycle pause to keep exam inputs responsive.
+      const wait = Math.max(MIN_IDLE_MS, cycleMs - elapsed, offMainThread ? 0 : elapsed);
       loopTimeoutRef.current = setTimeout(tick, wait);
     };
 
     loopTimeoutRef.current = setTimeout(tick, 0);
-  };
+  }, [runInference]);
 
   // Initialize camera and model in parallel
   const start = useCallback(async () => {
@@ -385,6 +491,14 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
       }
 
       streamRef.current = stream;
+      stream.getTracks().forEach(track => {
+        track.onended = () => {
+          if (isStale()) return;
+          stop();
+          setError('Camera disconnected. Please reconnect it and retry the proctor.');
+          setStatus('error');
+        };
+      });
 
       if (videoRef.current) {
         const video = videoRef.current;
@@ -395,18 +509,15 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
         video.setAttribute('muted', 'true');
         video.muted = true;
 
-        try {
-          await video.play();
-        } catch (playErr) {
-          console.warn('[Proctor] Video play auto-start caught:', playErr);
-        }
+        await video.play();
       }
 
+      if (isStale()) return;
       setStatus('camera_ready');
 
       // 2. Join the (already running) model load. Usually resolved by now.
       try {
-        const { ort, session, gpuAvailable } = await modelReady;
+        const { ort, session, gpuAvailable, offMainThread } = await modelReady;
         if (isStale()) return;
 
         ortRef.current = ort;
@@ -415,15 +526,19 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
 
         // GPU runs a tighter cadence; the CPU fallback is given a longer one
         // and the loop's duty-cycle rule slows it further if frames are slow.
-        startDetectionLoop(gpuAvailable ? WEBGPU_CYCLE_MS : WASM_CYCLE_MS);
+        startDetectionLoop(gpuAvailable ? WEBGPU_CYCLE_MS : WASM_CYCLE_MS, offMainThread);
       } catch (modelErr) {
-        console.warn('[Proctor] YOLO model failed to load, running in camera-only fallback mode:', modelErr);
-        setStatus('camera_only');
+        if (isStale()) return;
+        console.warn('[Proctor] YOLO model failed to load:', modelErr);
+        stop();
+        setError('Phone detection could not start. Please retry the proctor.');
+        setStatus('error');
       }
 
     } catch (err) {
+      if (isStale()) return;
       console.error('[Proctor] Camera initialization failed:', err);
-      isRunningRef.current = false;
+      stop();
       setError(
         err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
           ? 'Camera permission denied. Please allow camera access in your browser settings.'
@@ -431,104 +546,18 @@ export default function useYoloProctor({ contestId, enabled = false, onViolation
       );
       setStatus('error');
     }
-  }, []);
+  }, [startDetectionLoop, stop]);
 
-  // Stop the camera and the detection loop. The compiled model itself is kept
-  // alive at module scope so re-entering a contest is instant.
-  const stop = useCallback(() => {
-    isRunningRef.current = false;
-    // Invalidate any in-flight start() and any awaiting detection tick.
-    runTokenRef.current += 1;
-    loopGenerationRef.current += 1;
-    if (loopTimeoutRef.current) {
-      clearTimeout(loopTimeoutRef.current);
-      loopTimeoutRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    sessionRef.current = null;
-    ortRef.current = null;
-    setStatus('idle');
-    setPhoneDetected(false);
-    consecutiveDetectionsRef.current = 0;
-  }, []);
-
-  // Capture snapshot and report violation
-  const handleViolation = (detection) => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    // Capture full-resolution snapshot
-    const captureCanvas = document.createElement('canvas');
-    captureCanvas.width = video.videoWidth || 640;
-    captureCanvas.height = video.videoHeight || 480;
-    const captureCtx = captureCanvas.getContext('2d');
-    captureCtx.drawImage(video, 0, 0);
-
-    // Draw red bounding box on the snapshot. videoBbox is already in the
-    // full-resolution video coordinate space (mapped out of the letterbox), so
-    // no extra scaling is needed here.
-    if (detection.videoBbox) {
-      const [bx, by, bw, bh] = detection.videoBbox;
-      captureCtx.strokeStyle = '#ef4444';
-      captureCtx.lineWidth = 3;
-      captureCtx.strokeRect(bx, by, bw, bh);
-      // Label
-      captureCtx.fillStyle = '#ef4444';
-      captureCtx.font = 'bold 14px sans-serif';
-      captureCtx.fillText(
-        `Mobile Phone ${Math.round(detection.confidence * 100)}%`,
-        bx,
-        Math.max(by - 6, 14)
-      );
-    }
-
-    const snapshotBase64 = captureCanvas.toDataURL('image/jpeg', 0.8);
-
-    // Increment client-side violation counter immediately
-    setViolationCount(prev => prev + 1);
-
-    // Report to backend
-    if (contestId) {
-      const token = localStorage.getItem('topkorbo_token') || '';
-      const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-      fetch(`${backendBaseUrl}/contests/${contestId}/proctor/violation`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          violationType: 'MOBILE_PHONE_DETECTED',
-          confidence: Math.round(detection.confidence * 100),
-          image: snapshotBase64
-        })
-      }).catch(err => console.warn('[Proctor] Failed to report violation to server:', err.message));
-    }
-
-    if (onViolationRef.current) {
-      onViolationRef.current({
-        type: 'MOBILE_PHONE_DETECTED',
-        confidence: detection.confidence,
-        timestamp: Date.now()
-      });
-    }
-  };
-
-  // Auto-start/stop based on enabled prop
+  // Defer startup so the camera widget paints before permission / model work.
   useEffect(() => {
-    if (enabled && contestId) {
-      start();
-    } else {
+    const timer = enabled && contestId ? setTimeout(start, 0) : null;
+    return () => {
+      clearTimeout(timer);
       stop();
-    }
-    return () => stop();
+    };
   }, [enabled, contestId, start, stop]);
 
-  return { status, phoneDetected, violationCount, videoRef, error, start, stop };
+  return { status, phoneDetected, violationCount, videoRef, error, uploadError, start, stop };
 }
 
 // ── Tensor Preprocessing ──────────────────────────────────────────────────
@@ -547,18 +576,29 @@ function preprocessImage(ort, data, width, height, buffer) {
 
 // ── YOLO Output Postprocessing ────────────────────────────────────────────
 // YOLOv8 output shape: [1, 84, N] where 84 = 4 bbox coords + 80 class scores.
-// We only care about phones, so we scan a single class row (67) instead of the
-// full 80-class argmax — ~80x fewer reads per frame — and return just the
-// highest-confidence phone box (no NMS needed for a single best pick).
-function findBestPhone(output, dims) {
-  const numAnchors = dims && dims[2] ? dims[2] : 8400;
+// Return the best box whose winning class is phone; a single best pick needs no NMS.
+export function findBestPhone(output, dims) {
+  if (dims?.length !== 3 || dims[0] !== 1 || dims[1] !== 84 || dims[2] < 1 || output.length !== 84 * dims[2]) {
+    throw new Error('Unsupported YOLO output shape');
+  }
+  const numAnchors = dims[2];
   const scoreRow = (4 + CELL_PHONE_CLASS_ID) * numAnchors; // class 67 score offset
 
   let bestScore = -Infinity;
   let bestIdx = -1;
   for (let i = 0; i < numAnchors; i++) {
     const score = output[scoreRow + i];
-    if (score > bestScore) {
+    if (score >= PREFILTER_THRESHOLD && score > bestScore) {
+      // Check other classes only for candidates. A remote/book with a higher
+      // class score must not become a phone merely because its phone score is high.
+      let isPhone = true;
+      for (let classId = 0; classId < 80; classId++) {
+        if (classId !== CELL_PHONE_CLASS_ID && output[(4 + classId) * numAnchors + i] >= score) {
+          isPhone = false;
+          break;
+        }
+      }
+      if (!isPhone) continue;
       bestScore = score;
       bestIdx = i;
     }

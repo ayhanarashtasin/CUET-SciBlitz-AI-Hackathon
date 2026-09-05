@@ -27,10 +27,23 @@ Thumbs.db
 .idea/
 .agents/
 AGENTS.md
+.clinerules/
+.cursor/
+.devin-plugin/
+.grok-plugin/
+.junie/
+.kiro/
+.openclaw/
+.opencode/
+.qoder-plugin/
+.qoder/
+.swival/
+.windsurf/
+opencode.json
 .puku/
 *.log
 .puku-cli
-
+.github
 # Local test and runtime artifacts
 **/__tests__/
 coverage/
