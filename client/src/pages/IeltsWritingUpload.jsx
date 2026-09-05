@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../hooks/useLanguage';
-import { 
-  HiPencilAlt, 
-  HiArrowLeft, 
-  HiUpload, 
-  HiCheckCircle, 
-  HiX, 
-  HiDocumentText, 
-  HiPhotograph, 
+import {
+  HiPencilAlt,
+  HiArrowLeft,
+  HiUpload,
+  HiCheckCircle,
+  HiX,
+  HiDocumentText,
+  HiPhotograph,
   HiTrash,
   HiAcademicCap,
   HiVideoCamera,
@@ -57,7 +57,7 @@ export default function IeltsWritingUpload() {
         // Filter out legacy dummy items
         return parsed.filter(t => !['tut-1', 'tut-2', 'tut-3'].includes(t.id));
       }
-    } catch {}
+    } catch { }
     return [];
   });
 
@@ -96,7 +96,7 @@ export default function IeltsWritingUpload() {
     setTutorials(updated);
     try {
       localStorage.setItem('topkorbo_writing_tutorials', JSON.stringify(updated));
-    } catch {}
+    } catch { }
 
     toast.success(language === 'en' ? 'Tutorial published successfully!' : 'টিউটোরিয়াল সফলভাবে প্রকাশিত হয়েছে!');
     setIsAddingTutorial(false);
@@ -111,7 +111,7 @@ export default function IeltsWritingUpload() {
     setTutorials(updated);
     try {
       localStorage.setItem('topkorbo_writing_tutorials', JSON.stringify(updated));
-    } catch {}
+    } catch { }
     toast.success(language === 'en' ? 'Tutorial removed' : 'টিউটোরিয়াল মুছে ফেলা হয়েছে');
   };
 
@@ -462,15 +462,15 @@ export default function IeltsWritingUpload() {
               {activeSubOption === 'tutorials'
                 ? (language === 'en' ? 'Writing Tutorials' : 'রাইটিং টিউটোরিয়াল')
                 : activeSubOption === 'questions'
-                ? (language === 'en' ? 'Writing Questions' : 'রাইটিং প্রশ্নাবলী')
-                : (language === 'en' ? 'Writing Resource Center' : 'রাইটিং রিসোর্স সেন্টার')}
+                  ? (language === 'en' ? 'Writing Questions' : 'রাইটিং প্রশ্নাবলী')
+                  : (language === 'en' ? 'Writing Resource Center' : 'রাইটিং রিসোর্স সেন্টার')}
             </h2>
             <p>
               {activeSubOption === 'tutorials'
                 ? (language === 'en' ? 'Upload and manage video masterclasses, essay blueprints, and task guides.' : 'ভিডিও মাস্টারক্লাস, প্রবন্ধের গঠন এবং টাস্ক নির্দেশিকা আপলোড ও পরিচালনা করুন।')
                 : activeSubOption === 'questions'
-                ? (language === 'en' ? 'Create, manage, and upload question sets to the Writing Question Bank.' : 'রাইটিং প্রশ্ন ব্যাংকে প্রশ্ন সেট তৈরি, পরিচালনা এবং আপলোড করুন।')
-                : (language === 'en' ? 'Select whether to manage instructional tutorials or writing test questions.' : 'টিউটোরিয়াল পরিচালনা করবেন নাকি রাইটিং প্রশ্নাবলী পরিচালনা করবেন তা নির্বাচন করুন।')}
+                  ? (language === 'en' ? 'Create, manage, and upload question sets to the Writing Question Bank.' : 'রাইটিং প্রশ্ন ব্যাংকে প্রশ্ন সেট তৈরি, পরিচালনা এবং আপলোড করুন।')
+                  : (language === 'en' ? 'Select whether to manage instructional tutorials or writing test questions.' : 'টিউটোরিয়াল পরিচালনা করবেন নাকি রাইটিং প্রশ্নাবলী পরিচালনা করবেন তা নির্বাচন করুন।')}
             </p>
           </div>
         </div>
@@ -856,8 +856,8 @@ export default function IeltsWritingUpload() {
                     <>
                       <div className="ielts-bank-grid">
                         {dbSets.map((set) => (
-                          <div 
-                            key={set._id} 
+                          <div
+                            key={set._id}
                             className="ielts-bank-card"
                             onClick={() => setSelectedSetForDetails(set)}
                             style={{ cursor: 'pointer' }}
@@ -870,7 +870,7 @@ export default function IeltsWritingUpload() {
                                 <span>📝 Task 1 ({set.task1?.type}), Task 2 ({set.task2?.type})</span>
                               </div>
                               <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-                                <button 
+                                <button
                                   type="button"
                                   className="ielts-view-clean-btn"
                                   style={{
@@ -892,7 +892,7 @@ export default function IeltsWritingUpload() {
                                 </button>
 
                                 {(set.creator?._id === user.id || set.creator === user.id) && (
-                                  <button 
+                                  <button
                                     type="button"
                                     className="ielts-delete-set-btn"
                                     onClick={(e) => handleDeleteSet(set._id, e)}
@@ -935,15 +935,15 @@ export default function IeltsWritingUpload() {
                               {/* Task 1 Section */}
                               <div className="ielts-clean-task-section">
                                 <h4>Task 1 ({selectedSetForDetails.task1?.type === 'text' ? (language === 'en' ? 'Text' : 'টেক্সট') : selectedSetForDetails.task1?.type === 'pdf' ? 'PDF' : (language === 'en' ? 'Image' : 'ছবি')})</h4>
-                                
+
                                 <div className="ielts-original-prompt-container">
                                   {selectedSetForDetails.task1?.type === 'pdf' && selectedSetForDetails.task1?.pdfUrl && (
                                     <div className="ielts-modal-pdf-container">
-                                      <iframe 
-                                        src={getFullFileUrl(selectedSetForDetails.task1.pdfUrl)} 
-                                        width="100%" 
-                                        height="380px" 
-                                        style={{ border: '1px solid rgba(192, 133, 82, 0.15)', borderRadius: '12px' }} 
+                                      <iframe
+                                        src={getFullFileUrl(selectedSetForDetails.task1.pdfUrl)}
+                                        width="100%"
+                                        height="380px"
+                                        style={{ border: '1px solid rgba(192, 133, 82, 0.15)', borderRadius: '12px' }}
                                         title="Task 1 PDF"
                                       />
                                     </div>
@@ -951,10 +951,10 @@ export default function IeltsWritingUpload() {
 
                                   {selectedSetForDetails.task1?.type === 'image' && selectedSetForDetails.task1?.imageUrl && (
                                     <div className="ielts-modal-image-container" style={{ textAlign: 'center' }}>
-                                      <img 
-                                        src={getFullFileUrl(selectedSetForDetails.task1.imageUrl)} 
+                                      <img
+                                        src={getFullFileUrl(selectedSetForDetails.task1.imageUrl)}
                                         alt="Task 1 Prompt"
-                                        style={{ maxWidth: '100%', maxHeight: '420px', borderRadius: '12px', border: '1px solid rgba(192, 133, 82, 0.15)' }} 
+                                        style={{ maxWidth: '100%', maxHeight: '420px', borderRadius: '12px', border: '1px solid rgba(192, 133, 82, 0.15)' }}
                                       />
                                     </div>
                                   )}
@@ -970,15 +970,15 @@ export default function IeltsWritingUpload() {
                               {/* Task 2 Section */}
                               <div className="ielts-clean-task-section" style={{ marginTop: '24px' }}>
                                 <h4>Task 2 ({selectedSetForDetails.task2?.type === 'text' ? (language === 'en' ? 'Text' : 'টেক্সট') : selectedSetForDetails.task2?.type === 'pdf' ? 'PDF' : (language === 'en' ? 'Image' : 'ছবি')})</h4>
-                                
+
                                 <div className="ielts-original-prompt-container">
                                   {selectedSetForDetails.task2?.type === 'pdf' && selectedSetForDetails.task2?.pdfUrl && (
                                     <div className="ielts-modal-pdf-container">
-                                      <iframe 
-                                        src={getFullFileUrl(selectedSetForDetails.task2.pdfUrl)} 
-                                        width="100%" 
-                                        height="380px" 
-                                        style={{ border: '1px solid rgba(192, 133, 82, 0.15)', borderRadius: '12px' }} 
+                                      <iframe
+                                        src={getFullFileUrl(selectedSetForDetails.task2.pdfUrl)}
+                                        width="100%"
+                                        height="380px"
+                                        style={{ border: '1px solid rgba(192, 133, 82, 0.15)', borderRadius: '12px' }}
                                         title="Task 2 PDF"
                                       />
                                     </div>
@@ -986,10 +986,10 @@ export default function IeltsWritingUpload() {
 
                                   {selectedSetForDetails.task2?.type === 'image' && selectedSetForDetails.task2?.imageUrl && (
                                     <div className="ielts-modal-image-container" style={{ textAlign: 'center' }}>
-                                      <img 
-                                        src={getFullFileUrl(selectedSetForDetails.task2.imageUrl)} 
+                                      <img
+                                        src={getFullFileUrl(selectedSetForDetails.task2.imageUrl)}
                                         alt="Task 2 Prompt"
-                                        style={{ maxWidth: '100%', maxHeight: '420px', borderRadius: '12px', border: '1px solid rgba(192, 133, 82, 0.15)' }} 
+                                        style={{ maxWidth: '100%', maxHeight: '420px', borderRadius: '12px', border: '1px solid rgba(192, 133, 82, 0.15)' }}
                                       />
                                     </div>
                                   )}
@@ -1010,7 +1010,7 @@ export default function IeltsWritingUpload() {
                 </div>
               ) : (
                 /* viewMode === 'upload': Upload Form */
-                <div style={{ width: '100%' }}>
+                <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                   <div className="ielts-bank-header">
                     <h3>{language === 'en' ? 'Upload New Writing Question Set' : 'নতুন রাইটিং প্রশ্ন সেট আপলোড করুন'}</h3>
                     <button
@@ -1032,12 +1032,14 @@ export default function IeltsWritingUpload() {
                     </button>
                   </div>
 
-                  <form onSubmit={handleSubmit} className="ielts-writing-upload-form">
-                    {/* Set Name Input */}
-                    <div className="ielts-writing-form-group">
-                      <label className="ielts-writing-label">
-                        {language === 'en' ? 'Question Set Name' : 'প্রশ্ন সেটের নাম'}
-                        <span className="required-star">*</span>
+                  {/* Set Name Input Card */}
+                  <div className="ielts-writing-upload-card text-left">
+                    <div className="ielts-writing-card-header">
+                      <h3>{language === 'en' ? 'Question Set Information' : 'প্রশ্ন সেটের বিবরণ'}</h3>
+                    </div>
+                    <div className="ielts-writing-input-group">
+                      <label>
+                        {language === 'en' ? 'Set Name / Title' : 'সেট নাম / শিরোনাম'} *
                       </label>
                       <input
                         type="text"
@@ -1045,288 +1047,305 @@ export default function IeltsWritingUpload() {
                         onChange={(e) => setSetName(e.target.value)}
                         placeholder={
                           language === 'en'
-                            ? 'e.g. Cambridge IELTS 19 - Test 1'
-                            : 'যেমনঃ কেমব্রিজ আইইএলটিএস ১৯ - টেস্ট ১'
+                            ? 'e.g., Cambridge IELTS 19 - Test 1 Academic'
+                            : 'যেমনঃ কেমব্রিজ আইইএলটিএস ১৯ - টেস্ট ১ একাডেমিক'
                         }
-                        className="ielts-writing-input"
+                        className="ielts-writing-set-name-input"
                         disabled={isSubmitting}
                       />
                     </div>
+                  </div>
 
-                    {/* Task 1 & Task 2 Columns */}
-                    <div className="ielts-writing-tasks-container">
-                      {/* Task 1 Box */}
-                      <div className="ielts-writing-task-card">
-                        <div className="ielts-writing-task-header">
-                          <span className="ielts-writing-task-badge">Task 1</span>
-                          <span className="ielts-writing-task-subtitle">
-                            {language === 'en' ? 'Report / Summary (150+ words)' : 'রিপোর্ট / সারসংক্ষেপ (১৫০+ শব্দ)'}
-                          </span>
-                        </div>
-
-                        {/* Format Tabs */}
-                        <div className="ielts-writing-format-tabs">
-                          <button
-                            type="button"
-                            className={`ielts-writing-tab-btn ${task1Type === 'text' ? 'active' : ''}`}
-                            onClick={() => setTask1Type('text')}
-                          >
-                            <HiPencilAlt size={16} />
-                            <span>{language === 'en' ? 'Text' : 'টেক্সট'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className={`ielts-writing-tab-btn ${task1Type === 'pdf' ? 'active' : ''}`}
-                            onClick={() => setTask1Type('pdf')}
-                          >
-                            <HiDocumentText size={16} />
-                            <span>PDF</span>
-                          </button>
-                          <button
-                            type="button"
-                            className={`ielts-writing-tab-btn ${task1Type === 'image' ? 'active' : ''}`}
-                            onClick={() => setTask1Type('image')}
-                          >
-                            <HiPhotograph size={16} />
-                            <span>{language === 'en' ? 'Picture' : 'ছবি'}</span>
-                          </button>
-                        </div>
-
-                        {/* Task 1 Input Body */}
-                        {task1Type === 'text' && (
-                          <div className="ielts-writing-input-area">
-                            <textarea
-                              value={task1Text}
-                              onChange={(e) => setTask1Text(e.target.value)}
-                              placeholder={
-                                language === 'en'
-                                  ? 'Enter Task 1 instructions, chart descriptions or topic prompt...'
-                                  : 'টাস্ক ১ এর নির্দেশনা বা প্রশ্নের বিবরণ লিখুন...'
-                              }
-                              className="ielts-writing-textarea"
-                              rows={8}
-                              disabled={isSubmitting}
-                            />
-                          </div>
-                        )}
-
-                        {task1Type === 'pdf' && (
-                          <div className="ielts-writing-file-upload-area">
-                            {task1Pdf ? (
-                              <div className="ielts-writing-file-preview">
-                                <HiDocumentText size={32} className="ielts-writing-file-icon active" />
-                                <span className="ielts-writing-file-name">{task1Pdf.name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveFile(1, 'pdf')}
-                                  className="ielts-writing-remove-file-btn"
-                                  title={language === 'en' ? 'Remove PDF' : 'পিডিএফ মুছুন'}
-                                >
-                                  <HiTrash size={16} />
-                                </button>
-                              </div>
-                            ) : (
-                              <label className="ielts-writing-file-dropzone">
-                                <HiDocumentText size={36} className="ielts-writing-file-icon" />
-                                <span className="ielts-writing-file-label">
-                                  {language === 'en' ? 'Upload Task 1 PDF' : 'টাস্ক ১ পিডিএফ আপলোড করুন'}
-                                </span>
-                                <span className="ielts-writing-file-sublabel">(.pdf)</span>
-                                <input
-                                  type="file"
-                                  accept=".pdf"
-                                  onChange={(e) => handleFileChange(1, 'pdf', e.target.files[0])}
-                                  className="ielts-writing-file-input"
-                                  disabled={isSubmitting}
-                                />
-                              </label>
-                            )}
-                          </div>
-                        )}
-
-                        {task1Type === 'image' && (
-                          <div className="ielts-writing-file-upload-area">
-                            {task1Image ? (
-                              <div className="ielts-writing-file-preview image-preview-wrapper">
-                                <img
-                                  src={URL.createObjectURL(task1Image)}
-                                  alt="Task 1 Preview"
-                                  className="ielts-writing-image-preview"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveFile(1, 'image')}
-                                  className="ielts-writing-remove-file-btn"
-                                  title={language === 'en' ? 'Remove Image' : 'ছবি মুছুন'}
-                                >
-                                  <HiTrash size={16} />
-                                </button>
-                              </div>
-                            ) : (
-                              <label className="ielts-writing-file-dropzone">
-                                <HiPhotograph size={36} className="ielts-writing-file-icon" />
-                                <span className="ielts-writing-file-label">
-                                  {language === 'en' ? 'Upload Task 1 Picture' : 'টাস্ক ১ ছবি আপলোড করুন'}
-                                </span>
-                                <span className="ielts-writing-file-sublabel">(.png, .jpg, .jpeg, .webp, .gif)</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => handleFileChange(1, 'image', e.target.files[0])}
-                                  className="ielts-writing-file-input"
-                                  disabled={isSubmitting}
-                                />
-                              </label>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Task 2 Box */}
-                      <div className="ielts-writing-task-card">
-                        <div className="ielts-writing-task-header">
-                          <span className="ielts-writing-task-badge">Task 2</span>
-                          <span className="ielts-writing-task-subtitle">
-                            {language === 'en' ? 'Essay (250+ words)' : 'প্রবন্ধ (২৫০+ শব্দ)'}
-                          </span>
-                        </div>
-
-                        {/* Format Tabs */}
-                        <div className="ielts-writing-format-tabs">
-                          <button
-                            type="button"
-                            className={`ielts-writing-tab-btn ${task2Type === 'text' ? 'active' : ''}`}
-                            onClick={() => setTask2Type('text')}
-                          >
-                            <HiPencilAlt size={16} />
-                            <span>{language === 'en' ? 'Text' : 'টেক্সট'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className={`ielts-writing-tab-btn ${task2Type === 'pdf' ? 'active' : ''}`}
-                            onClick={() => setTask2Type('pdf')}
-                          >
-                            <HiDocumentText size={16} />
-                            <span>PDF</span>
-                          </button>
-                          <button
-                            type="button"
-                            className={`ielts-writing-tab-btn ${task2Type === 'image' ? 'active' : ''}`}
-                            onClick={() => setTask2Type('image')}
-                          >
-                            <HiPhotograph size={16} />
-                            <span>{language === 'en' ? 'Picture' : 'ছবি'}</span>
-                          </button>
-                        </div>
-
-                        {/* Task 2 Input Body */}
-                        {task2Type === 'text' && (
-                          <div className="ielts-writing-input-area">
-                            <textarea
-                              value={task2Text}
-                              onChange={(e) => setTask2Text(e.target.value)}
-                              placeholder={
-                                language === 'en'
-                                  ? 'Enter Task 2 essay topic, prompt statement, and discussion requirements...'
-                                  : 'টাস্ক ২ এর প্রবন্ধের বিষয় ও নির্দেশনা লিখুন...'
-                              }
-                              className="ielts-writing-textarea"
-                              rows={8}
-                              disabled={isSubmitting}
-                            />
-                          </div>
-                        )}
-
-                        {task2Type === 'pdf' && (
-                          <div className="ielts-writing-file-upload-area">
-                            {task2Pdf ? (
-                              <div className="ielts-writing-file-preview">
-                                <HiDocumentText size={32} className="ielts-writing-file-icon active" />
-                                <span className="ielts-writing-file-name">{task2Pdf.name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveFile(2, 'pdf')}
-                                  className="ielts-writing-remove-file-btn"
-                                  title={language === 'en' ? 'Remove PDF' : 'পিডিএফ মুছুন'}
-                                >
-                                  <HiTrash size={16} />
-                                </button>
-                              </div>
-                            ) : (
-                              <label className="ielts-writing-file-dropzone">
-                                <HiDocumentText size={36} className="ielts-writing-file-icon" />
-                                <span className="ielts-writing-file-label">
-                                  {language === 'en' ? 'Upload Task 2 PDF' : 'টাস্ক ২ পিডিএফ আপলোড করুন'}
-                                </span>
-                                <span className="ielts-writing-file-sublabel">(.pdf)</span>
-                                <input
-                                  type="file"
-                                  accept=".pdf"
-                                  onChange={(e) => handleFileChange(2, 'pdf', e.target.files[0])}
-                                  className="ielts-writing-file-input"
-                                  disabled={isSubmitting}
-                                />
-                              </label>
-                            )}
-                          </div>
-                        )}
-
-                        {task2Type === 'image' && (
-                          <div className="ielts-writing-file-upload-area">
-                            {task2Image ? (
-                              <div className="ielts-writing-file-preview image-preview-wrapper">
-                                <img
-                                  src={URL.createObjectURL(task2Image)}
-                                  alt="Task 2 Preview"
-                                  className="ielts-writing-image-preview"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveFile(2, 'image')}
-                                  className="ielts-writing-remove-file-btn"
-                                  title={language === 'en' ? 'Remove Image' : 'ছবি মুছুন'}
-                                >
-                                  <HiTrash size={16} />
-                                </button>
-                              </div>
-                            ) : (
-                              <label className="ielts-writing-file-dropzone">
-                                <HiPhotograph size={36} className="ielts-writing-file-icon" />
-                                <span className="ielts-writing-file-label">
-                                  {language === 'en' ? 'Upload Task 2 Picture' : 'টাস্ক ২ ছবি আপলোড করুন'}
-                                </span>
-                                <span className="ielts-writing-file-sublabel">(.png, .jpg, .jpeg, .webp, .gif)</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => handleFileChange(2, 'image', e.target.files[0])}
-                                  className="ielts-writing-file-input"
-                                  disabled={isSubmitting}
-                                />
-                              </label>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Submit Question Set Button */}
-                    <div className="ielts-writing-submit-container">
-                      <button
-                        type="submit"
-                        className="ielts-writing-submit-btn-cta"
-                        disabled={isSubmitting}
-                      >
-                        <HiCheckCircle size={22} />
-                        <span>
-                          {isSubmitting
-                            ? (language === 'en' ? 'Submitting Question Set...' : 'প্রশ্ন সেট সাবমিট হচ্ছে...')
-                            : (language === 'en' ? 'Submit Question Set' : 'প্রশ্ন সেট সাবমিট করুন')}
+                  {/* Task 1 Card */}
+                  <div className="ielts-writing-upload-card text-left">
+                    <div className="ielts-writing-card-header">
+                      <div>
+                        <h3>Task 1</h3>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          {language === 'en' ? 'Report / Summary (150+ words)' : 'রিপোর্ট / সারসংক্ষেপ (১৫০+ শব্দ)'}
                         </span>
-                      </button>
+                      </div>
+                      <div className="ielts-writing-toggle-group">
+                        <button
+                          type="button"
+                          className={`ielts-writing-toggle-btn ${task1Type === 'text' ? 'active' : ''}`}
+                          onClick={() => setTask1Type('text')}
+                        >
+                          {language === 'en' ? 'Text' : 'টেক্সট'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`ielts-writing-toggle-btn ${task1Type === 'pdf' ? 'active' : ''}`}
+                          onClick={() => setTask1Type('pdf')}
+                        >
+                          PDF
+                        </button>
+                        <button
+                          type="button"
+                          className={`ielts-writing-toggle-btn ${task1Type === 'image' ? 'active' : ''}`}
+                          onClick={() => setTask1Type('image')}
+                        >
+                          {language === 'en' ? 'Picture' : 'ছবি'}
+                        </button>
+                      </div>
                     </div>
-                  </form>
-                </div>
+
+                    <div className="ielts-writing-input-group">
+                      <label>
+                        {language === 'en' ? 'Task 1 Prompt / Question' : 'টাস্ক ১ এর প্রশ্ন বা নির্দেশিকা'} *
+                      </label>
+                      {task1Type === 'text' && (
+                        <textarea
+                          value={task1Text}
+                          onChange={(e) => setTask1Text(e.target.value)}
+                          placeholder={
+                            language === 'en'
+                              ? 'Enter Task 1 prompt and description here...'
+                              : 'টাস্ক ১ এর বিস্তারিত প্রশ্ন ও নির্দেশনা এখানে লিখুন...'
+                          }
+                          rows={6}
+                          className="ielts-writing-set-textarea"
+                          disabled={isSubmitting}
+                        />
+                      )}
+
+                      {task1Type === 'pdf' && (
+                        <div className="ielts-writing-file-group">
+                          {task1Pdf ? (
+                            <div className="ielts-writing-file-uploaded">
+                              <HiDocumentText size={36} className="ielts-writing-file-icon success" />
+                              <span className="ielts-writing-file-status">
+                                {language === 'en' ? 'PDF Selected' : 'পিডিএফ সিলেক্টেড'}
+                              </span>
+                              <span className="ielts-writing-file-name">{task1Pdf.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFile(1, 'pdf')}
+                                className="ielts-writing-remove-file-btn"
+                                title={language === 'en' ? 'Remove PDF' : 'পিডিএফ মুছুন'}
+                              >
+                                <HiX size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="ielts-writing-file-dropzone">
+                              <HiDocumentText size={32} className="ielts-writing-file-icon" />
+                              <span className="ielts-writing-file-label">
+                                {language === 'en' ? 'Upload Task 1 PDF' : 'টাস্ক ১ পিডিএফ আপলোড করুন'}
+                              </span>
+                              <span className="ielts-writing-file-sublabel">(.pdf)</span>
+                              <input
+                                type="file"
+                                accept=".pdf"
+                                onChange={(e) => handleFileChange(1, 'pdf', e.target.files[0])}
+                                className="ielts-writing-file-input"
+                                disabled={isSubmitting}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {task1Type === 'image' && (
+                        <div className="ielts-writing-file-group">
+                          {task1Image ? (
+                            <div className="ielts-writing-file-uploaded">
+                              <img
+                                src={URL.createObjectURL(task1Image)}
+                                alt="Task 1 Preview"
+                                className="ielts-writing-image-preview"
+                              />
+                              <span className="ielts-writing-file-status">
+                                {language === 'en' ? 'Image Selected' : 'ছবি সিলেক্টেড'}
+                              </span>
+                              <span className="ielts-writing-file-name">{task1Image.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFile(1, 'image')}
+                                className="ielts-writing-remove-file-btn"
+                                title={language === 'en' ? 'Remove Image' : 'ছবি মুছুন'}
+                              >
+                                <HiX size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="ielts-writing-file-dropzone">
+                              <HiPhotograph size={32} className="ielts-writing-file-icon" />
+                              <span className="ielts-writing-file-label">
+                                {language === 'en' ? 'Upload Task 1 Picture' : 'টাস্ক ১ ছবি আপলোড করুন'}
+                              </span>
+                              <span className="ielts-writing-file-sublabel">(.png, .jpg, .jpeg, .webp, .gif)</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleFileChange(1, 'image', e.target.files[0])}
+                                className="ielts-writing-file-input"
+                                disabled={isSubmitting}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Task 2 Card */}
+                  <div className="ielts-writing-upload-card text-left">
+                    <div className="ielts-writing-card-header">
+                      <div>
+                        <h3>Task 2</h3>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          {language === 'en' ? 'Essay (250+ words)' : 'প্রবন্ধ (২৫০+ শব্দ)'}
+                        </span>
+                      </div>
+                      <div className="ielts-writing-toggle-group">
+                        <button
+                          type="button"
+                          className={`ielts-writing-toggle-btn ${task2Type === 'text' ? 'active' : ''}`}
+                          onClick={() => setTask2Type('text')}
+                        >
+                          {language === 'en' ? 'Text' : 'টেক্সট'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`ielts-writing-toggle-btn ${task2Type === 'pdf' ? 'active' : ''}`}
+                          onClick={() => setTask2Type('pdf')}
+                        >
+                          PDF
+                        </button>
+                        <button
+                          type="button"
+                          className={`ielts-writing-toggle-btn ${task2Type === 'image' ? 'active' : ''}`}
+                          onClick={() => setTask2Type('image')}
+                        >
+                          {language === 'en' ? 'Picture' : 'ছবি'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="ielts-writing-input-group">
+                      <label>
+                        {language === 'en' ? 'Task 2 Essay Topic / Question' : 'টাস্ক ২ এর প্রবন্ধের বিষয় ও নির্দেশনা'} *
+                      </label>
+                      {task2Type === 'text' && (
+                        <textarea
+                          value={task2Text}
+                          onChange={(e) => setTask2Text(e.target.value)}
+                          placeholder={
+                            language === 'en'
+                              ? 'Enter Task 2 essay topic, prompt statement, and discussion requirements...'
+                              : 'টাস্ক ২ এর প্রবন্ধের বিষয় ও নির্দেশনা লিখুন...'
+                          }
+                          rows={6}
+                          className="ielts-writing-set-textarea"
+                          disabled={isSubmitting}
+                        />
+                      )}
+
+                      {task2Type === 'pdf' && (
+                        <div className="ielts-writing-file-group">
+                          {task2Pdf ? (
+                            <div className="ielts-writing-file-uploaded">
+                              <HiDocumentText size={36} className="ielts-writing-file-icon success" />
+                              <span className="ielts-writing-file-status">
+                                {language === 'en' ? 'PDF Selected' : 'পিডিএফ সিলেক্টেড'}
+                              </span>
+                              <span className="ielts-writing-file-name">{task2Pdf.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFile(2, 'pdf')}
+                                className="ielts-writing-remove-file-btn"
+                                title={language === 'en' ? 'Remove PDF' : 'পিডিএফ মুছুন'}
+                              >
+                                <HiX size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="ielts-writing-file-dropzone">
+                              <HiDocumentText size={32} className="ielts-writing-file-icon" />
+                              <span className="ielts-writing-file-label">
+                                {language === 'en' ? 'Upload Task 2 PDF' : 'টাস্ক ২ পিডিএফ আপলোড করুন'}
+                              </span>
+                              <span className="ielts-writing-file-sublabel">(.pdf)</span>
+                              <input
+                                type="file"
+                                accept=".pdf"
+                                onChange={(e) => handleFileChange(2, 'pdf', e.target.files[0])}
+                                className="ielts-writing-file-input"
+                                disabled={isSubmitting}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {task2Type === 'image' && (
+                        <div className="ielts-writing-file-group">
+                          {task2Image ? (
+                            <div className="ielts-writing-file-uploaded">
+                              <img
+                                src={URL.createObjectURL(task2Image)}
+                                alt="Task 2 Preview"
+                                className="ielts-writing-image-preview"
+                              />
+                              <span className="ielts-writing-file-status">
+                                {language === 'en' ? 'Image Selected' : 'ছবি সিলেক্টেড'}
+                              </span>
+                              <span className="ielts-writing-file-name">{task2Image.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFile(2, 'image')}
+                                className="ielts-writing-remove-file-btn"
+                                title={language === 'en' ? 'Remove Image' : 'ছবি মুছুন'}
+                              >
+                                <HiX size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="ielts-writing-file-dropzone">
+                              <HiPhotograph size={32} className="ielts-writing-file-icon" />
+                              <span className="ielts-writing-file-label">
+                                {language === 'en' ? 'Upload Task 2 Picture' : 'টাস্ক ২ ছবি আপলোড করুন'}
+                              </span>
+                              <span className="ielts-writing-file-sublabel">(.png, .jpg, .jpeg, .webp, .gif)</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleFileChange(2, 'image', e.target.files[0])}
+                                className="ielts-writing-file-input"
+                                disabled={isSubmitting}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Form Actions */}
+                  <div className="ielts-writing-form-actions">
+                    <button
+                      type="button"
+                      className="ielts-writing-cancel-btn"
+                      onClick={() => setViewMode('bank')}
+                      disabled={isSubmitting}
+                    >
+                      {language === 'en' ? 'Cancel' : 'বাতিল'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="ielts-writing-submit-btn"
+                      disabled={isSubmitting}
+                    >
+                      <HiCheckCircle size={20} style={{ marginRight: '6px' }} />
+                      <span>
+                        {isSubmitting
+                          ? (language === 'en' ? 'Submitting...' : 'সাবমিট হচ্ছে...')
+                          : (language === 'en' ? 'Submit Question Set' : 'প্রশ্ন সেট সাবমিট করুন')}
+                      </span>
+                    </button>
+                  </div>
+                </form>
               )
             )}
           </div>
