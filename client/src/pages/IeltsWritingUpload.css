@@ -382,6 +382,34 @@
   }
 }
 
+.ielts-writing-submit-btn-cta {
+  background: var(--gradient-cta, linear-gradient(135deg, #C08552, #8C5A3C));
+  color: #ffffff;
+  border: none;
+  padding: 12px 24px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(140, 90, 60, 0.2);
+  transition: all var(--transition-smooth, 0.3s ease);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ielts-writing-submit-btn-cta:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(140, 90, 60, 0.3);
+  opacity: 0.95;
+}
+
+.ielts-writing-submit-btn-cta:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 /* Question Bank Styling */
 .ielts-bank-container {
   width: 100%;

@@ -1,12 +1,11 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../hooks/useLanguage';
 import {
   HiVolumeUp,
   HiBookOpen,
   HiPencilAlt,
-  HiChatAlt2,
-  HiUpload
+  HiChatAlt2
 } from 'react-icons/hi';
 import Sidebar from '../components/layout/Sidebar';
 import { motion } from 'framer-motion';
@@ -103,7 +102,12 @@ export default function IeltsTeacher() {
             <div className="ielts-teacher-grid">
               
               {/* Listening Card */}
-              <div className="ielts-teacher-card">
+              <div 
+                className="ielts-teacher-card" 
+                onClick={() => navigate('/ielts-teacher/listening/upload')}
+                role="button"
+                tabIndex={0}
+              >
                 <div>
                   <div className="ielts-teacher-icon"><HiVolumeUp size={32} /></div>
                   <h3>{language === 'en' ? 'Listening' : 'লিসেনিং'}</h3>
@@ -113,14 +117,15 @@ export default function IeltsTeacher() {
                       : 'লিসেনিং প্রশ্ন, ট্রান্সক্রিপ্ট এবং উত্তরপত্র আপলোড করুন। শূন্যস্থান পূরণ, এমসিকিউ এবং লেবেলিং টাস্ক সমর্থন করে।'}
                   </p>
                 </div>
-                <button className="ielts-upload-btn" onClick={() => navigate('/ielts-teacher/listening/upload')}>
-                  <HiUpload size={16} />
-                  <span>{language === 'en' ? 'Questions' : 'প্রশ্নসমূহ'}</span>
-                </button>
               </div>
 
               {/* Reading Card */}
-              <div className="ielts-teacher-card">
+              <div 
+                className="ielts-teacher-card" 
+                onClick={() => navigate('/ielts-teacher/reading/upload')}
+                role="button"
+                tabIndex={0}
+              >
                 <div>
                   <div className="ielts-teacher-icon"><HiBookOpen size={32} /></div>
                   <h3>{language === 'en' ? 'Reading' : 'রিডিং'}</h3>
@@ -130,14 +135,15 @@ export default function IeltsTeacher() {
                       : 'রিডিং প্যাসেজ ইনপুট দিন এবং সেই অনুযায়ী মাল্টিপল চয়েস বা হেডিং ম্যাচিং সংক্রান্ত প্রশ্নাবলী ডিজাইন করুন।'}
                   </p>
                 </div>
-                <button className="ielts-upload-btn" onClick={() => navigate('/ielts-teacher/reading/upload')}>
-                  <HiUpload size={16} />
-                  <span>{language === 'en' ? 'Questions' : 'প্রশ্নসমূহ'}</span>
-                </button>
               </div>
 
               {/* Writing Card */}
-              <div className="ielts-teacher-card">
+              <div 
+                className="ielts-teacher-card" 
+                onClick={() => navigate('/ielts-teacher/writing/upload')}
+                role="button"
+                tabIndex={0}
+              >
                 <div>
                   <div className="ielts-teacher-icon"><HiPencilAlt size={32} /></div>
                   <h3>{language === 'en' ? 'Writing' : 'রাইটিং'}</h3>
@@ -147,14 +153,15 @@ export default function IeltsTeacher() {
                       : 'রচনা লেখার টাস্ক এবং চার্ট বা ডায়াগ্রাম বর্ণনার টাস্ক যুক্ত করুন, সাথে আদর্শ মডেল উত্তরপত্রও সরবরাহ করুন।'}
                   </p>
                 </div>
-                <button className="ielts-upload-btn" onClick={() => navigate('/ielts-teacher/writing/upload')}>
-                  <HiUpload size={16} />
-                  <span>{language === 'en' ? 'Questions' : 'প্রশ্নসমূহ'}</span>
-                </button>
               </div>
 
               {/* Speaking Card */}
-              <div className="ielts-teacher-card">
+              <div 
+                className="ielts-teacher-card" 
+                onClick={() => navigate('/ielts-teacher/speaking/upload')}
+                role="button"
+                tabIndex={0}
+              >
                 <div>
                   <div className="ielts-teacher-icon"><HiChatAlt2 size={32} /></div>
                   <h3>{language === 'en' ? 'Speaking' : 'স্পিকিং'}</h3>
@@ -164,10 +171,6 @@ export default function IeltsTeacher() {
                       : 'স্পিকিং প্রম্পট, কিউ কার্ড এবং সাক্ষাৎকার সংক্রান্ত প্রশ্ন যোগ করুন। ব্যান্ড-৯ মানের উত্তরের জন্য রূপরেখা প্রদান করুন।'}
                   </p>
                 </div>
-                <button className="ielts-upload-btn" onClick={() => navigate('/ielts-teacher/speaking/upload')}>
-                  <HiUpload size={16} />
-                  <span>{language === 'en' ? 'Questions' : 'প্রশ্নসমূহ'}</span>
-                </button>
               </div>
 
             </div>
