@@ -4,6 +4,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import {
   HiBookOpen,
   HiArrowLeft,
+  HiArrowRight,
 } from 'react-icons/hi';
 import Sidebar from '../components/layout/Sidebar';
 import { motion } from 'framer-motion';
@@ -108,11 +109,43 @@ export default function IeltsReading() {
               transition={{ duration: 0.4 }}
               className="ielts-reading-hero"
             >
-              <div className="ielts-reading-hero__icon-row">
-                <div className="ielts-reading-hero__icon">
-                  <HiBookOpen size={32} />
+              <div className="ielts-reading-hero__icon-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div className="ielts-reading-hero__icon">
+                    <HiBookOpen size={32} />
+                  </div>
+                  <h1>{language === 'en' ? 'Reading Section Overview' : 'রিডিং সেকশন ওভারভিউ'}</h1>
                 </div>
-                <h1>{language === 'en' ? 'Reading Section Overview' : 'রিডিং সেকশন ওভারভিউ'}</h1>
+                <button
+                  onClick={() => navigate('/ielts-prep/reading/practice')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 22px',
+                    background: 'var(--sky-blue, #C08552)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '50px',
+                    fontWeight: 700,
+                    fontSize: '0.95rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(192, 133, 82, 0.3)',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 133, 82, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 14px rgba(192, 133, 82, 0.3)';
+                  }}
+                >
+                  <span>{language === 'en' ? 'Start Preparation' : 'প্রস্তুতি শুরু করুন'}</span>
+                  <HiArrowRight size={18} />
+                </button>
               </div>
 
               <div className="ielts-reading-description">

@@ -1,25 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../hooks/useLanguage';
 import {
   HiVolumeUp,
   HiBookOpen,
   HiPencilAlt,
   HiChatAlt2,
-  HiArrowLeft,
-  HiArrowRight,
-  HiClipboardList,
   HiAcademicCap
 } from 'react-icons/hi';
 import Sidebar from '../components/layout/Sidebar';
 import { motion } from 'framer-motion';
-import toast from 'react-hot-toast';
 import './IeltsPrep.css';
 
 export default function IeltsPrep() {
   const { language } = useLanguage();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [user, setUser] = useState({
     name: localStorage.getItem('topkorbo_name') || 'Student',
@@ -27,9 +22,6 @@ export default function IeltsPrep() {
     email: localStorage.getItem('topkorbo_email') || '',
     role: localStorage.getItem('topkorbo_role') || 'student',
   });
-
-  const [step, setStep] = useState(location.state?.step || 1);
-  const segmentsRef = useRef(null);
 
   // Auth Guard
   useEffect(() => {
@@ -85,25 +77,6 @@ export default function IeltsPrep() {
     );
   }
 
-  const handleStartPrep = () => {
-    setStep(2);
-    setTimeout(() => {
-      segmentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
-  };
-
-  const handleBack = () => {
-    setStep(1);
-  };
-
-  const handleSelectSegment = (segmentName) => {
-    toast.success(
-      language === 'en'
-        ? `Entering ${segmentName} module...`
-        : `${segmentName} মডিউলে প্রবেশ করা হচ্ছে...`
-    );
-  };
-
   return (
     <div className="ielts-prep-container">
       <Sidebar activeTab="ielts-prep" user={user} />
@@ -115,7 +88,7 @@ export default function IeltsPrep() {
         <div className="ielts-prep-workspace">
           <div className="ielts-prep-workspace__body">
 
-            {/* ================= STEP 1: Overview & Info ================= */}
+            {/* ================= Overview & Info ================= */}
             <motion.div
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -132,15 +105,11 @@ export default function IeltsPrep() {
               <p className="ielts-description">
                 {language === 'en'
                   ? "The International English Language Testing System (IELTS) is the world's most popular high-stakes English language proficiency test for study, work, and migration. It assesses your abilities in four key communication areas: Listening, Reading, Writing, and Speaking."
-                  : "ইন্টারন্যাশনাল ইংলিশ ল্যাঙ্গুয়েজ টেস্টিং সিস্টেম (IELTS) পড়াশোনা, কর্মসংস্থান বা অভিবাসনের জন্য বিশ্বের সর্বাধিক জনপ্রিয় উচ্চ-মানের ইংরেজি ভাষা দক্ষতা পরীক্ষা। এটি চারটি প্রধান যোগাযোগের ক্ষেত্রে আপনার দক্ষতা মূল্যায়ন করে: লিসেনিং, রিডিং, রাইটিং এবং স্পিকিং।"}
+                  : "ইন্টারন্যাশনাল ইংলিশ ল্যাঙ্গুয়েজ টেস্টিং সিস্টেম (IELTS) পড়াশোনা, কর্মসংস্থান বা অভিবাসনের জন্য বিশ্বের সর্বাধিক জনপ্রিয় উচ্চ-মানের ইংরেজি ভাষা দক্ষতা পরীক্ষা। এটি চারটি প্রধান যোগাযোগের ক্ষেত্রে আপনার দক্ষতা মূল্যায়ন করে: লিসেনিং, রিডিং, রাইটিং এবং স্পিকিং।"}
               </p>
 
               {/* Mark Distribution Section */}
               <div className="ielts-distribution-section">
-                <h3 className="ielts-section-title">
-                  {language === 'en' ? 'Mark Distribution & Exam Structure' : 'নম্বর বন্টন ও পরীক্ষার গঠন'}
-                </h3>
-
                 <div className="ielts-grid-4">
                   {/* Writing */}
                   <div className="ielts-dist-card" onClick={() => navigate('/ielts-prep/writing')} style={{ cursor: 'pointer' }}>
@@ -191,101 +160,7 @@ export default function IeltsPrep() {
                   </div>
                 </div>
               </div>
-
-              {/* Start Button */}
-              {step !== 2 && (
-                <button onClick={handleStartPrep} className="ielts-btn-primary">
-                  <span>{language === 'en' ? 'Start Preparation' : 'প্রস্তুতি শুরু করুন'}</span>
-                  <HiArrowRight size={18} />
-                </button>
-              )}
             </motion.div>
-
-            {/* ================= STEP 2: The 4 Segments ================= */}
-            {step === 2 && (
-              <motion.div
-                ref={segmentsRef}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-              >
-                {/* Section Header with Back button */}
-                <div className="ielts-segments-header">
-                  <button onClick={handleBack} className="ielts-back-btn" title={language === 'en' ? 'Go Back' : 'পিছনে যান'}>
-                    <HiArrowLeft size={20} />
-                  </button>
-                  <div>
-                    <h1 className="ielts-section-title" style={{ margin: 0 }}>
-                      {language === 'en' ? 'Select IELTS Segment' : 'আইইএলটিএস সেগমেন্ট নির্বাচন করুন'}
-                    </h1>
-                    <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                      {language === 'en'
-                        ? 'Select one of the four segments below to practice standard questions.'
-                        : 'মানসম্মত প্রশ্ন অনুশীলন করার জন্য নিচের চারটি সেগমেন্টের যেকোনো একটি নির্বাচন করুন।'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Grid of the 4 segments */}
-                <div className="ielts-segments-grid">
-                  {/* Writing Card */}
-                  <div className="ielts-segment-card" onClick={() => navigate('/ielts-prep/writing/practice')}>
-                    <div className="ielts-segment-icon"><HiPencilAlt size={36} /></div>
-                    <h3>{language === 'en' ? 'Writing Practice' : 'রাইটিং প্র্যাকটিস'}</h3>
-                    <p className="ielts-segment-desc">
-                      {language === 'en'
-                        ? 'Practice drafting charts, process diagrams, and analytical essays with clear structured tasks.'
-                        : 'চার্ট, প্রক্রিয়ার চিত্র এবং বিশ্লেষণাত্মক প্রবন্ধ লেখার সাথে সাথে রচনার গঠন নিখুঁত করুন।'}
-                    </p>
-                    <span className="ielts-segment-meta">
-                      {language === 'en' ? '2 Tasks' : '২টি টাস্ক'}
-                    </span>
-                  </div>
-
-                  {/* Speaking Card */}
-                  <div className="ielts-segment-card" onClick={() => navigate('/ielts-prep/speaking/practice')}>
-                    <div className="ielts-segment-icon"><HiChatAlt2 size={36} /></div>
-                    <h3>{language === 'en' ? 'Speaking Practice' : 'স্পিকিং প্র্যাকটিস'}</h3>
-                    <p className="ielts-segment-desc">
-                      {language === 'en'
-                        ? 'Review face-to-face topics, practice response formatting, and study interactive feedback.'
-                        : 'সাক্ষাৎকারের বিষয়বস্তু পর্যালোচনা করুন, কথা বলার গঠন এবং ইন্টারঅ্যাক্টিভ ফিডব্যাক নিয়ে কাজ করুন।'}
-                    </p>
-                    <span className="ielts-segment-meta">
-                      {language === 'en' ? '3 Parts' : '৩টি পার্ট'}
-                    </span>
-                  </div>
-
-                  {/* Listening Card */}
-                  <div className="ielts-segment-card" onClick={() => navigate('/ielts-prep/listening/practice')}>
-                    <div className="ielts-segment-icon"><HiVolumeUp size={36} /></div>
-                    <h3>{language === 'en' ? 'Listening Practice' : 'লিসেনিং প্র্যাকটিস'}</h3>
-                    <p className="ielts-segment-desc">
-                      {language === 'en'
-                        ? 'Practice listening to native conversations, monologues, and academic lectures with real-time feedback.'
-                        : 'রিয়েল-টাইম ফিডব্যাক সহ ইংরেজিভাষীদের কথোপকথন, একক বক্তৃতা এবং একাডেমিক লেকচার শোনার অনুশীলন করুন।'}
-                    </p>
-                    <span className="ielts-segment-meta">
-                      {language === 'en' ? '40 Questions' : '৪০টি প্রশ্ন'}
-                    </span>
-                  </div>
-
-                  {/* Reading Card */}
-                  <div className="ielts-segment-card" onClick={() => navigate('/ielts-prep/reading/practice')}>
-                    <div className="ielts-segment-icon"><HiBookOpen size={36} /></div>
-                    <h3>{language === 'en' ? 'Reading Practice' : 'রিডিং প্র্যাকটিস'}</h3>
-                    <p className="ielts-segment-desc">
-                      {language === 'en'
-                        ? 'Enhance your skimming, scanning, and analytical comprehension using curated passages.'
-                        : 'সংগৃহীত প্যাসেজ ব্যবহারের মাধ্যমে স্কিমিং, স্ক্যানিং এবং বিশ্লেষণাত্মক রিডিং দক্ষতা বৃদ্ধি করুন।'}
-                    </p>
-                    <span className="ielts-segment-meta">
-                      {language === 'en' ? '3 Passages' : '৩টি প্যাসেজ'}
-                    </span>
-                  </div>
-                </div>
-              </motion.div>
-            )}
 
           </div>
         </div>

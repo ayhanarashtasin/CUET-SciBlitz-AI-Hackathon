@@ -199,7 +199,7 @@ export default function IeltsListeningUpload() {
 
   return (
     <div className="ielts-upload-page">
-      <Sidebar activeTab="ielts-teacher" user={user} />
+      <Sidebar activeTab="ielts-teacher-listening" user={user} />
 
       <main className="ielts-upload-content">
         {/* Header */}
