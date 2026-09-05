@@ -299,7 +299,7 @@ export default function IeltsReadingUpload() {
 
   return (
     <div className="ielts-reading-upload-page">
-      <Sidebar activeTab="ielts-teacher" user={user} />
+      <Sidebar activeTab="ielts-teacher-reading" user={user} />
 
       <main className="ielts-reading-upload-content">
         {/* Header */}

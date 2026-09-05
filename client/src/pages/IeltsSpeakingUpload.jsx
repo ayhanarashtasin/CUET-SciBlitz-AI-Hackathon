@@ -138,7 +138,7 @@ export default function IeltsSpeakingUpload() {
 
   return (
     <div className="ielts-speaking-upload-page">
-      <Sidebar activeTab="ielts-teacher" user={user} />
+      <Sidebar activeTab="ielts-teacher-speaking" user={user} />
 
       <main className="ielts-speaking-upload-content">
         {/* Header */}

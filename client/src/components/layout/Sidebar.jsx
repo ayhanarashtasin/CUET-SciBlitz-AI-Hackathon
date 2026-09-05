@@ -20,6 +20,9 @@ import {
   LuAward,
   LuUpload,
   LuChevronDown,
+  LuVolume2,
+  LuPencil,
+  LuMic,
   LuMenu,
   LuX,
   LuLock,
@@ -176,6 +179,13 @@ export default function Sidebar({ activeTab, user }) {
     if (itemId === 'contests' && activeTab === 'make-contest-question' && !isTeacher) {
       return true;
     }
+    if (isTeacher) {
+      if (itemId === 'ielts-teacher-listening' && (activeTab === 'ielts-teacher-listening' || (typeof window !== 'undefined' && window.location.pathname.includes('/ielts-teacher/listening')))) return true;
+      if (itemId === 'ielts-teacher-reading' && (activeTab === 'ielts-teacher-reading' || (typeof window !== 'undefined' && window.location.pathname.includes('/ielts-teacher/reading')))) return true;
+      if (itemId === 'ielts-teacher-writing' && (activeTab === 'ielts-teacher-writing' || (typeof window !== 'undefined' && window.location.pathname.includes('/ielts-teacher/writing')))) return true;
+      if (itemId === 'ielts-teacher-speaking' && (activeTab === 'ielts-teacher-speaking' || (typeof window !== 'undefined' && window.location.pathname.includes('/ielts-teacher/speaking')))) return true;
+      if (itemId === 'ielts-teacher' && activeTab === 'ielts-teacher' && typeof window !== 'undefined' && window.location.pathname === '/ielts-teacher') return true;
+    }
     return false;
   }, [activeTab, isTeacher]);
 
@@ -297,6 +307,12 @@ export default function Sidebar({ activeTab, user }) {
         icon: <LuTrophy size={18} />,
         path: '/make-contest-question'
       });
+      competeItems.push({
+        id: 'cheating-verify',
+        label: language === 'en' ? 'Cheating Verify' : 'চিটিং যাচাই',
+        icon: <LuShieldAlert size={18} />,
+        path: '/cheating-verify'
+      });
     }
 
     const moreItems = [];
@@ -309,38 +325,54 @@ export default function Sidebar({ activeTab, user }) {
       });
     } else if (isTeacher) {
       moreItems.push({
-        id: 'ielts-teacher',
+        id: 'ielts-teacher-group',
         label: language === 'en' ? 'IELTS' : 'আইইএলটিএস',
         icon: <LuLanguages size={18} />,
-        path: '/ielts-teacher'
+        path: '/ielts-teacher',
+        children: [
+          {
+            id: 'ielts-teacher-listening',
+            label: language === 'en' ? 'Listening' : 'লিসেনিং',
+            icon: <LuVolume2 size={16} />,
+            path: '/ielts-teacher/listening/upload'
+          },
+          {
+            id: 'ielts-teacher-reading',
+            label: language === 'en' ? 'Reading' : 'রিডিং',
+            icon: <LuBookOpen size={16} />,
+            path: '/ielts-teacher/reading/upload'
+          },
+          {
+            id: 'ielts-teacher-writing',
+            label: language === 'en' ? 'Writing' : 'রাইটিং',
+            icon: <LuPencil size={16} />,
+            path: '/ielts-teacher/writing/upload'
+          },
+          {
+            id: 'ielts-teacher-speaking',
+            label: language === 'en' ? 'Speaking' : 'স্পিকিং',
+            icon: <LuMic size={16} />,
+            path: '/ielts-teacher/speaking/upload'
+          }
+        ]
       });
     }
 
-    if (isStudent || isMentor) {
-      moreItems.push({
+    const plansAndMoreItems = [
+      {
         id: 'pricing',
         label: language === 'en' ? 'Premium Plans' : 'প্রিমিয়াম প্ল্যান',
         icon: <LuSparkles size={18} />,
         path: '/pricing',
         tag: 'PRO'
-      });
-    }
-
-    if (isTeacher) {
-      moreItems.push({
-        id: 'cheating-verify',
-        label: language === 'en' ? 'Cheating Verify' : 'চিটিং যাচাই',
-        icon: <LuShieldAlert size={18} />,
-        path: '/cheating-verify'
-      });
-    }
-
-    moreItems.push({
-      id: 'support',
-      label: language === 'en' ? 'Support' : 'সাপোর্ট',
-      icon: <LuHeadphones size={18} />,
-      path: '/support'
-    });
+      },
+      {
+        id: 'support',
+        label: language === 'en' ? 'Support' : 'সাপোর্ট',
+        icon: <LuHeadphones size={18} />,
+        path: '/support'
+      }
+    ];
 
     return [
       {
@@ -364,15 +396,20 @@ export default function Sidebar({ activeTab, user }) {
         items: competeItems
       },
       {
-        key: 'more',
-        title: language === 'en' ? 'More' : 'অন্যান্য',
+        key: 'ielts-hub',
+        title: language === 'en' ? 'IELTS Hub' : 'আইইএলটিএস হাব',
         items: moreItems
+      },
+      {
+        key: 'plans-and-more',
+        title: language === 'en' ? 'Plans and more' : 'প্ল্যান এবং অন্যান্য',
+        items: plansAndMoreItems
       }
     ].filter(section => section.items.length > 0);
   }, [t, language, isMentor, isTeacher, isStudent, hasUnreadClass, activeTab]);
 
   // ── Accordion State: MAIN expanded by default; persisted across navigation ──
-  const DEFAULT_EXPANDED = { main: true, learning: false, guideline: false, compete: false, more: false };
+  const DEFAULT_EXPANDED = { main: true, learning: false, guideline: false, compete: false, 'ielts-hub': false, 'plans-and-more': false };
   const [expandedSections, setExpandedSections] = useState(() => {
     try {
       const stored = JSON.parse(sessionStorage.getItem('topkorbo_sidebar_expanded') || 'null');
@@ -393,11 +430,20 @@ export default function Sidebar({ activeTab, user }) {
     }
   }, [expandedSections]);
 
+  // ── IELTS Teacher sub-dropdown accordion state ──
+  const [isIeltsSubOpen, setIsIeltsSubOpen] = useState(true);
+
+  useEffect(() => {
+    if (isTeacher && (activeTab?.startsWith('ielts-teacher') || (typeof window !== 'undefined' && window.location.pathname.includes('/ielts-teacher')))) {
+      setIsIeltsSubOpen(true);
+    }
+  }, [activeTab, isTeacher]);
+
   // ── Automatically keep the section containing activeTab expanded ──
   useEffect(() => {
     if (!activeTab) return;
     for (const section of sections) {
-      if (section.items.some(item => isItemActive(item.id))) {
+      if (section.items.some(item => isItemActive(item.id) || (item.children && item.children.some(child => isItemActive(child.id))))) {
         setExpandedSections(prev => {
           if (prev[section.key]) return prev;
           return { ...prev, [section.key]: true };
@@ -442,6 +488,129 @@ export default function Sidebar({ activeTab, user }) {
   const renderMenuItem = (item, isInsideTree = true) => {
     const isLockedForTutor = isMentor && !isMentorPro &&
       item.id !== 'dashboard' && item.id !== 'pricing' && item.id !== 'support';
+
+    // Item has sub-dropdown children (e.g. IELTS for teachers)
+    if (item.children && item.children.length > 0) {
+      const isSubExpanded = isIeltsSubOpen;
+      const isAnyChildActive = item.children.some(child => isItemActive(child.id));
+      const isParentActive = isItemActive(item.id) || (typeof window !== 'undefined' && window.location.pathname === item.path);
+
+      return (
+        <li key={item.id} className="dashboard-sidebar__menu-li">
+          <div style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => {
+                navigate(item.path);
+                setIsMobileMenuOpen(false);
+              }}
+              className={`dashboard-sidebar__menu-btn ${
+                isParentActive ? 'dashboard-sidebar__menu-btn--active' : ''
+              } ${isInsideTree ? 'dashboard-sidebar__menu-btn--nested' : ''}`}
+              style={{ flex: 1, paddingRight: '32px' }}
+              aria-current={isParentActive ? 'page' : undefined}
+            >
+              {isParentActive && (
+                <span className="dashboard-sidebar__active-indicator" aria-hidden="true" />
+              )}
+              <span className="dashboard-sidebar__menu-icon">
+                {item.icon}
+              </span>
+              <span className="dashboard-sidebar__menu-label">
+                {item.label}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsIeltsSubOpen(prev => !prev);
+              }}
+              aria-label={isSubExpanded ? (language === 'en' ? 'Collapse IELTS' : 'আইইএলটিএস বন্ধ করুন') : (language === 'en' ? 'Expand IELTS' : 'আইইএলটিএস খুলুন')}
+              style={{
+                position: 'absolute',
+                right: '4px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: isAnyChildActive ? 'var(--sky-blue, #C08552)' : '#A3938F',
+                borderRadius: '4px',
+                zIndex: 2,
+              }}
+            >
+              <LuChevronDown
+                size={14}
+                style={{
+                  transform: isSubExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+              />
+            </button>
+          </div>
+
+          {/* Sub-menu accordion items */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateRows: isSubExpanded ? '1fr' : '0fr',
+              transition: 'grid-template-rows 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ minHeight: 0, overflow: 'hidden' }}>
+              <ul className="dashboard-sidebar__menu" style={{
+                marginLeft: '18px',
+                paddingLeft: '8px',
+                borderLeft: '1.5px solid rgba(192, 133, 82, 0.2)',
+                marginTop: '3px',
+                marginBottom: '4px',
+                gap: '2px',
+                display: 'flex',
+                flexDirection: 'column',
+              }}>
+                {item.children.map(child => {
+                  const childActive = isItemActive(child.id);
+                  return (
+                    <li key={child.id} className="dashboard-sidebar__menu-li">
+                      <button
+                        type="button"
+                        onClick={() => handleMenuClick(child)}
+                        className={`dashboard-sidebar__menu-btn ${
+                          childActive ? 'dashboard-sidebar__menu-btn--active' : ''
+                        }`}
+                        style={{
+                          fontSize: '0.82rem',
+                          padding: '6px 8px',
+                          color: childActive ? '#8C5230' : '#6E5A56',
+                        }}
+                        aria-current={childActive ? 'page' : undefined}
+                      >
+                        {childActive && (
+                          <span className="dashboard-sidebar__active-indicator" aria-hidden="true" />
+                        )}
+                        <span className="dashboard-sidebar__menu-icon" style={{ width: '15px', height: '15px', marginRight: '8px' }}>
+                          {child.icon}
+                        </span>
+                        <span className="dashboard-sidebar__menu-label">
+                          {child.label}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </li>
+      );
+    }
+
     const active = isItemActive(item.id);
 
     return (
@@ -647,14 +816,19 @@ export default function Sidebar({ activeTab, user }) {
           <div className="dashboard-sidebar__accordion-container">
             {sections.map((section) => {
               const isExpanded = !!expandedSections[section.key];
-              const hasActiveChild = section.items.some(item => isItemActive(item.id));
+              const hasActiveChild = section.items.some(item => isItemActive(item.id) || (item.children && item.children.some(child => isItemActive(child.id))));
 
               if (isCollapsedMode) {
                 return (
                   <div key={section.key} className="dashboard-sidebar__section dashboard-sidebar__section--collapsed-mode">
                     <div className="dashboard-sidebar__collapsed-items">
                       <ul className="dashboard-sidebar__menu">
-                        {section.items.map(item => renderMenuItem(item, false))}
+                        {section.items.map(item => {
+                          if (item.children && item.children.length > 0) {
+                            return item.children.map(child => renderMenuItem(child, false));
+                          }
+                          return renderMenuItem(item, false);
+                        })}
                       </ul>
                     </div>
                   </div>

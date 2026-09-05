@@ -5,11 +5,9 @@ import {
   HiPencilAlt,
   HiArrowLeft,
   HiArrowRight,
-  HiPlay,
 } from 'react-icons/hi';
 import Sidebar from '../components/layout/Sidebar';
 import { motion } from 'framer-motion';
-import toast from 'react-hot-toast';
 import './IeltsWriting.css';
 
 export default function IeltsWriting() {
@@ -77,15 +75,6 @@ export default function IeltsWriting() {
     );
   }
 
-  const handleStartDemo = () => {
-    toast.success(
-      language === 'en'
-        ? 'Launching Writing practice prompt...'
-        : 'রাইটিং প্র্যাকটিস প্রম্পট লোড করা হচ্ছে...'
-    );
-    navigate('/ielts-prep/writing/demo');
-  };
-
   return (
     <div className="ielts-writing-container">
       <Sidebar activeTab="ielts-prep" user={user} />
@@ -120,11 +109,43 @@ export default function IeltsWriting() {
               transition={{ duration: 0.4 }}
               className="ielts-writing-hero"
             >
-              <div className="ielts-writing-hero__icon-row">
-                <div className="ielts-writing-hero__icon">
-                  <HiPencilAlt size={32} />
+              <div className="ielts-writing-hero__icon-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div className="ielts-writing-hero__icon">
+                    <HiPencilAlt size={32} />
+                  </div>
+                  <h1>{language === 'en' ? 'Writing Section Overview' : 'রাইটিং সেকশন ওভারভিউ'}</h1>
                 </div>
-                <h1>{language === 'en' ? 'Writing Section Overview' : 'রাইটিং সেকশন ওভারভিউ'}</h1>
+                <button
+                  onClick={() => navigate('/ielts-prep/writing/practice')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 22px',
+                    background: 'var(--sky-blue, #C08552)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '50px',
+                    fontWeight: 700,
+                    fontSize: '0.95rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(192, 133, 82, 0.3)',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 133, 82, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 14px rgba(192, 133, 82, 0.3)';
+                  }}
+                >
+                  <span>{language === 'en' ? 'Start Preparation' : 'প্রস্তুতি শুরু করুন'}</span>
+                  <HiArrowRight size={18} />
+                </button>
               </div>
 
               <div className="ielts-writing-description">
@@ -149,55 +170,49 @@ export default function IeltsWriting() {
                     </p>
 
                     <p style={{ marginTop: '1.25rem' }}><strong>General Training IELTS</strong></p>
-                    <p>Write a letter:</p>
-                    <ul>
-                      <li>Formal</li>
-                      <li>Semi-formal</li>
-                      <li>Informal</li>
-                    </ul>
-                    <p><strong>Minimum 150 words</strong></p>
+                    <p>Write a letter (formal, semi-formal, or informal).</p>
                   </div>
 
                   <div className="ielts-writing-sub-section">
                     <h3>Task 2 (40 minutes)</h3>
-                    <p>Write an essay.</p>
+                    <p><strong>Essay writing</strong> (Academic &amp; GT are similar format, but academic topics are more formal).</p>
                     <p><strong>Minimum 250 words</strong></p>
-                    <p>Types:</p>
-                    <ul>
-                      <li>Opinion</li>
-                      <li>Discussion</li>
-                      <li>Advantages & Disadvantages</li>
-                      <li>Problem & Solution</li>
-                      <li>Double Question</li>
-                    </ul>
-                    <p style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--text-accent)' }}>
-                      Worth 2/3 of the Writing score, so it has much more impact on your writing band.
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                      Worth 2/3 of the Writing score.
                     </p>
+
+                    <p style={{ marginTop: '1.25rem' }}><strong>Essay types:</strong></p>
+                    <ul>
+                      <li>Opinion (Agree/Disagree)</li>
+                      <li>Discussion (Discuss both views)</li>
+                      <li>Advantages / Disadvantages</li>
+                      <li>Problem / Solution</li>
+                      <li>Direct Questions</li>
+                    </ul>
                   </div>
                 </div>
 
-                {/* Four Assessment Criteria */}
+                {/* Assessment Criteria Table */}
                 <div style={{ marginTop: '2rem' }}>
-                  <p><strong>Writing is assessed on four criteria:</strong></p>
-                  <p>Each contributes 25%:</p>
+                  <p><strong>Writing is assessed on 4 criteria:</strong></p>
                   <table className="ielts-criteria-table">
                     <thead>
                       <tr>
                         <th>Criteria</th>
-                        <th>Details</th>
+                        <th>Description</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td><strong>Task Achievement/Response</strong></td>
-                        <td>How well you answer the prompt and expand your ideas.</td>
+                        <td><strong>Task Achievement (Task 1) / Task Response (Task 2)</strong></td>
+                        <td>How well you answered all parts of the prompt with proper detail and development.</td>
                       </tr>
                       <tr>
                         <td><strong>Coherence & Cohesion</strong></td>
-                        <td>The organization of paragraphs and logical connection between ideas.</td>
+                        <td>Logical organization, paragraphing, and effective use of linking devices.</td>
                       </tr>
                       <tr>
-                        <td><strong>Lexical Resource (Vocabulary)</strong></td>
+                        <td><strong>Lexical Resource</strong></td>
                         <td>The range and accuracy of words and collocations used.</td>
                       </tr>
                       <tr>
@@ -206,36 +221,6 @@ export default function IeltsWriting() {
                       </tr>
                     </tbody>
                   </table>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Demo Question Action Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.15 }}
-              className="ielts-writing-actions"
-            >
-              <div
-                className="ielts-writing-action-card"
-                onClick={handleStartDemo}
-              >
-                <div className="ielts-writing-action-card__left">
-                  <div className="ielts-writing-action-card__icon">
-                    <HiPlay size={28} />
-                  </div>
-                  <div className="ielts-writing-action-card__text">
-                    <h3>{language === 'en' ? 'Demo Prompt' : 'ডেমো প্রম্পট'}</h3>
-                    <p>
-                      {language === 'en'
-                        ? 'Try a sample writing prompt to write and submit your response.'
-                        : 'উত্তর লেখার ও সাবমিট করার জন্য একটি নমুনা রাইটিং প্রম্পট চেষ্টা করুন।'}
-                    </p>
-                  </div>
-                </div>
-                <div className="ielts-writing-action-card__arrow">
-                  <HiArrowRight size={22} />
                 </div>
               </div>
             </motion.div>
